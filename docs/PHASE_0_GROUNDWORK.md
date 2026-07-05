@@ -40,9 +40,11 @@ Phase 0 establishes what GIVEMEUI is allowed to become before the parser, runner
 - Written threat model exists: complete.
 - Command preview and execution safety documented: complete.
 
-## Next Production Step
+## Handoff
 
-Phase 1 should improve deterministic discovery:
+Phase 1 is now tracked in [Phase 1 deterministic CLI discovery](./PHASE_1_DISCOVERY.md).
+
+Phase 1 improved deterministic discovery with:
 
 - executable resolution with path display
 - version capture

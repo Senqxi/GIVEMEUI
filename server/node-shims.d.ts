@@ -1,5 +1,6 @@
 declare const process: {
   env: Record<string, string | undefined>;
+  cwd(): string;
 };
 
 declare const console: {
@@ -54,14 +55,23 @@ declare module "node:child_process" {
 }
 
 declare module "node:fs" {
+  export const constants: {
+    X_OK: number;
+  };
+  export function accessSync(path: string, mode?: number): void;
   export function readFileSync(path: string): Uint8Array;
+  export function rmSync(path: string, options?: { force?: boolean; recursive?: boolean }): void;
   export function statSync(path: string): {
     isFile(): boolean;
   };
 }
 
 declare module "node:path" {
+  export const delimiter: string;
+  export const sep: string;
+  export function dirname(path: string): string;
   export function extname(path: string): string;
+  export function isAbsolute(path: string): boolean;
   export function join(...paths: string[]): string;
   export function normalize(path: string): string;
   export function relative(from: string, to: string): string;

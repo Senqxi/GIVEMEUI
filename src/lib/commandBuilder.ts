@@ -60,7 +60,7 @@ export function initialValuesFor(command: CommandSpec): FieldValues {
 }
 
 function initialValueForField(field: FieldSpec): FieldValues[string] {
-  if (field.defaultValue !== undefined) return field.defaultValue;
+  if (field.required && field.defaultValue !== undefined) return field.defaultValue;
   if (field.kind === "boolean") return false;
   return "";
 }
@@ -71,4 +71,3 @@ function isEmptyValue(value: FieldValues[string]): boolean {
   if (Array.isArray(value)) return value.length === 0;
   return false;
 }
-

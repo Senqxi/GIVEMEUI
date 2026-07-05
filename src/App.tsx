@@ -150,6 +150,15 @@ export function App() {
       setSelectedFieldId(result.manifest.commands[0].fields[0]?.id ?? null);
       setValues(initialValuesFor(result.manifest.commands[0]));
       appendConsole("system", `Captured help via ${formatCommand(result.executed)} (${result.manifest.commands[0].fields.length} fields).`);
+      if (result.resolution?.resolvedPath) {
+        appendConsole("system", `Resolved executable: ${result.resolution.resolvedPath}`);
+      }
+      if (result.version) {
+        appendConsole("system", `Captured version: ${result.version}`);
+      }
+      for (const warning of result.manifest.discovery?.warnings ?? []) {
+        appendConsole("stderr", warning);
+      }
 
       if (result.stderr.trim()) {
         appendConsole("stderr", result.stderr.trim());
@@ -428,7 +437,7 @@ export function App() {
             <PanelHeader
               icon={<Wrench size={17} />}
               title="Generated UI"
-              subtitle={`${manifest.name} · ${selectedCommand.fields.length} detected fields`}
+              subtitle={`${manifest.name}${manifest.version ? ` · ${manifest.version}` : ""} · ${selectedCommand.fields.length} detected fields`}
               action={
                 <div className="panel-actions">
                   <select
@@ -484,6 +493,7 @@ export function App() {
                 </div>
               }
             />
+            <ToolDiscoveryPanel manifest={manifest} />
             <SchemaSummary fields={selectedCommand.fields} stats={fieldStats} />
             <FieldInspector
               fields={selectedCommand.fields}
@@ -801,6 +811,54 @@ function SchemaSummary({
         <ConfidenceBar label="Medium" value={stats.medium} total={stats.total} />
         <ConfidenceBar label="Low" value={stats.low} total={stats.total} />
       </div>
+    </section>
+  );
+}
+
+function ToolDiscoveryPanel({ manifest }: { manifest: ToolManifest }) {
+  const discovery = manifest.discovery;
+
+  if (!discovery) {
+    return (
+      <section className="discovery-metadata">
+        <div className="metadata-row">
+          <span>Executable</span>
+          <code>{manifest.executable}</code>
+        </div>
+      </section>
+    );
+  }
+
+  return (
+    <section className="discovery-metadata">
+      <div className="metadata-row">
+        <span>Resolved</span>
+        <code>{discovery.resolvedExecutable}</code>
+      </div>
+      <div className="metadata-row">
+        <span>Source</span>
+        <code>{discovery.resolution.type}</code>
+      </div>
+      {manifest.version ? (
+        <div className="metadata-row">
+          <span>Version</span>
+          <code>{manifest.version}</code>
+        </div>
+      ) : null}
+      <div className="metadata-row">
+        <span>Help</span>
+        <code>{formatCommand(discovery.helpCommand)}</code>
+      </div>
+      <div className="metadata-row">
+        <span>Attempts</span>
+        <code>{discovery.helpAttempts.length}</code>
+      </div>
+      {discovery.warnings.length > 0 ? (
+        <div className="metadata-warning">
+          <AlertTriangle size={14} />
+          <span>{discovery.warnings[0]}</span>
+        </div>
+      ) : null}
     </section>
   );
 }

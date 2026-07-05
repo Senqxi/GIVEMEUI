@@ -1,5 +1,5 @@
 import { commandNameFromExecutable, parseCommandLine } from "./commandLine";
-import type { CommandSpec, FieldKind, FieldSpec, ToolManifest } from "./schema";
+import type { CommandSpec, DiscoveryMetadata, FieldKind, FieldSpec, ToolManifest } from "./schema";
 
 type ParsedOption = {
   flag?: string;
@@ -9,19 +9,40 @@ type ParsedOption = {
   confidence: number;
 };
 
+type ParsedSubcommand = {
+  name: string;
+  description?: string;
+};
+
 const HELP_ARGS = new Set(["--help", "-h", "help"]);
 
 export function commandLineForHelp(input: string): string[] {
+  return helpCommandCandidates(input)[0] ?? [];
+}
+
+export function helpCommandCandidates(input: string): string[][] {
   const argv = parseCommandLine(input);
   if (argv.length === 0) return [];
   const hasHelp = argv.slice(1).some((arg) => HELP_ARGS.has(arg));
-  return hasHelp ? argv : [...argv, "--help"];
+  if (hasHelp) return [argv];
+
+  const candidates = [
+    [...argv, "--help"],
+    [...argv, "-h"],
+    argv.length > 1 ? [argv[0], "help", ...argv.slice(1)] : [argv[0], "help"]
+  ];
+
+  return dedupeCommands(candidates);
 }
 
-export function parseHelpOutput(helpText: string, originalCommandLine: string): ToolManifest {
+export function parseHelpOutput(
+  helpText: string,
+  originalCommandLine: string,
+  options: { executable?: string; baseArgs?: string[]; version?: string; discovery?: DiscoveryMetadata } = {}
+): ToolManifest {
   const originalArgv = parseCommandLine(originalCommandLine);
-  const executable = originalArgv[0] ?? "command";
-  const baseArgs = originalArgv.slice(1).filter((arg) => !HELP_ARGS.has(arg));
+  const executable = options.executable ?? originalArgv[0] ?? "command";
+  const baseArgs = options.baseArgs ?? originalArgv.slice(1).filter((arg) => !HELP_ARGS.has(arg));
   const name = commandNameFromExecutable(executable);
   const fields = parseFields(helpText);
   const command: CommandSpec = {
@@ -34,6 +55,17 @@ export function parseHelpOutput(helpText: string, originalCommandLine: string): 
       notes: ["Runs locally without shell interpolation."]
     }
   };
+  const subcommands: CommandSpec[] = parseSubcommands(helpText).slice(0, 16).map((subcommand) => ({
+    id: stableId(`${name}-${subcommand.name}`),
+    name: subcommand.name,
+    description: subcommand.description,
+    subcommand: [subcommand.name],
+    fields: cloneFields(fields),
+    output: { expectedTypes: ["text"] },
+    safety: {
+      notes: ["Runs locally without shell interpolation.", "Subcommand schema is inferred from top-level help and should be reviewed."]
+    }
+  }));
 
   const now = new Date().toISOString();
   return {
@@ -41,9 +73,11 @@ export function parseHelpOutput(helpText: string, originalCommandLine: string): 
     name,
     executable,
     baseArgs,
+    version: options.version,
     source: "detected",
     rawHelp: helpText,
-    commands: [command],
+    discovery: options.discovery,
+    commands: [command, ...subcommands],
     createdAt: now,
     updatedAt: now
   };
@@ -80,7 +114,8 @@ export function parseFields(helpText: string): FieldSpec[] {
     pending = field;
   }
 
-  return fields;
+  const fieldsWithRequiredHints = markRequiredFields(fields, helpText);
+  return [...fieldsWithRequiredHints, ...parsePositionals(helpText, usedIds)];
 }
 
 function parseOptionLine(line: string): ParsedOption | null {
@@ -192,6 +227,79 @@ function toFieldSpec(id: string, option: ParsedOption): FieldSpec {
   };
 }
 
+function parsePositionals(helpText: string, usedIds: Set<string>): FieldSpec[] {
+  const fields: FieldSpec[] = [];
+  const seen = new Set<string>();
+  const usage = usageText(helpText);
+  if (!usage) return fields;
+
+  const tokens = usage.split(/\s+/).slice(1);
+  let position = 0;
+
+  for (const token of tokens) {
+    if (!looksLikePositionalToken(token)) continue;
+
+    const cleaned = cleanPositionalToken(token);
+    if (!cleaned || seen.has(cleaned)) continue;
+
+    const id = uniqueId(stableId(cleaned), usedIds);
+    const kind = inferPositionalKind(cleaned);
+    fields.push({
+      id,
+      label: titleFromRaw(cleaned),
+      description: `Positional argument inferred from usage: ${token}`,
+      kind,
+      required: !token.includes("["),
+      position,
+      placeholder: cleaned,
+      ui: {
+        group: "Arguments",
+        advanced: false,
+        control: kind === "number" ? "number" : undefined
+      },
+      confidence: 0.48
+    });
+    seen.add(cleaned);
+    usedIds.add(id);
+    position += 1;
+  }
+
+  return fields;
+}
+
+function parseSubcommands(helpText: string): ParsedSubcommand[] {
+  const subcommands: ParsedSubcommand[] = [];
+  const seen = new Set<string>();
+  let inSection = false;
+
+  for (const rawLine of helpText.split(/\r?\n/)) {
+    const line = rawLine.replace(/\t/g, "    ");
+    const trimmed = line.trim();
+    if (!trimmed) continue;
+
+    if (/^(available\s+)?commands?:$/i.test(trimmed) || /^subcommands?:$/i.test(trimmed)) {
+      inSection = true;
+      continue;
+    }
+
+    if (inSection && /^[A-Z][A-Za-z\s]+:$/.test(trimmed)) {
+      break;
+    }
+
+    if (!inSection) continue;
+
+    const match = line.match(/^\s{2,}([a-z][a-z0-9_-]{1,30})\s{2,}(.+)$/i);
+    if (!match) continue;
+
+    const name = match[1];
+    if (HELP_ARGS.has(name) || seen.has(name)) continue;
+    subcommands.push({ name, description: match[2].trim() });
+    seen.add(name);
+  }
+
+  return subcommands;
+}
+
 function inferKind(option: ParsedOption, choices: string[] | undefined, defaultValue: string | number | undefined): FieldKind {
   const source = `${option.flag ?? ""} ${option.shortFlag ?? ""} ${option.valueHint ?? ""} ${option.description}`.toLowerCase();
   if (source.includes("password") || source.includes("secret") || source.includes("token")) return "secret";
@@ -229,7 +337,9 @@ function extractChoices(valueHint: string | undefined, description: string): str
 }
 
 function extractDefault(description: string): string | number | undefined {
-  const match = description.match(/default(?:s)?(?: is|:)?\s+["'`]?([^,"'`).\]]+)/i);
+  const match =
+    description.match(/\((?:default|defaults? to):\s*([^)]+)\)/i) ??
+    description.match(/\bdefault(?:s)?(?:\s+is|\s*:\s*|\s+to)\s+["'`]?([^,"'`).\]]+)/i);
   if (!match) return undefined;
   const raw = match[1].trim();
   const numeric = Number(raw);
@@ -247,6 +357,64 @@ function placeholderFromKind(kind: FieldKind, valueHint: string | undefined): st
 function isAdvanced(option: ParsedOption): boolean {
   const source = `${option.flag ?? ""} ${option.shortFlag ?? ""} ${option.description}`.toLowerCase();
   return /\b(debug|trace|verbose|quiet|deprecated|internal|experimental)\b/.test(source);
+}
+
+function markRequiredFields(fields: FieldSpec[], helpText: string): FieldSpec[] {
+  const usage = usageText(helpText);
+  if (!usage) return fields;
+
+  return fields.map((field) => {
+    const flag = field.flag ?? field.shortFlag;
+    if (!flag) return field;
+    const index = usage.indexOf(flag);
+    if (index < 0) return field;
+    const before = usage.slice(Math.max(0, index - 1), index);
+    return before === "[" ? field : { ...field, required: true, confidence: Math.min(1, field.confidence + 0.04) };
+  });
+}
+
+function usageText(helpText: string): string | undefined {
+  return helpText
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .find((line) => /^usage:/i.test(line))
+    ?.replace(/^usage:\s*/i, "")
+    .replace(/\s+/g, " ");
+}
+
+function looksLikePositionalToken(token: string): boolean {
+  const cleaned = cleanPositionalToken(token);
+  if (!cleaned) return false;
+  if (token.includes("-")) return false;
+  if (/^(options?|flags?|command|commands)$/i.test(cleaned) && token.includes("[")) return false;
+  if (/^[a-z0-9_./]+$/i.test(cleaned) && cleaned.includes(".")) return false;
+  return /^[A-Z][A-Z0-9_-]*$/.test(cleaned) || /^<[^>]+>$/.test(token) || /^[A-Z][A-Za-z0-9_-]*\.\.\.$/.test(token);
+}
+
+function cleanPositionalToken(token: string): string {
+  return token
+    .replace(/^[\[{(<]+/, "")
+    .replace(/[\]})>,]+$/, "")
+    .replace(/\.\.\.$/, "")
+    .trim();
+}
+
+function inferPositionalKind(name: string): FieldKind {
+  const source = name.toLowerCase();
+  if (/\b(count|number|port|size|limit|threads?)\b/.test(source)) return "number";
+  if (/\b(dir|directory|folder|cwd)\b/.test(source)) return "directory";
+  if (/\b(file|path|input|output|source|dest|destination)\b/.test(source)) return "file";
+  if (/\b(url|uri|endpoint)\b/.test(source)) return "string";
+  return "string";
+}
+
+function cloneFields(fields: FieldSpec[]): FieldSpec[] {
+  return fields.map((field) => ({
+    ...field,
+    choices: field.choices ? [...field.choices] : undefined,
+    validation: field.validation ? { ...field.validation } : undefined,
+    ui: field.ui ? { ...field.ui } : undefined
+  }));
 }
 
 function labelFromOption(option: ParsedOption, fallback: string): string {
@@ -293,4 +461,18 @@ function uniqueId(baseId: string, usedIds: Set<string>): string {
   let suffix = 2;
   while (usedIds.has(`${baseId}-${suffix}`)) suffix += 1;
   return `${baseId}-${suffix}`;
+}
+
+function dedupeCommands(commands: string[][]): string[][] {
+  const seen = new Set<string>();
+  const deduped: string[][] = [];
+
+  for (const command of commands) {
+    const key = JSON.stringify(command);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    deduped.push(command);
+  }
+
+  return deduped;
 }

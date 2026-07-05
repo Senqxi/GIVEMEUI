@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
-import { buildArgs } from "../src/lib/commandBuilder";
+import { buildArgs, initialValuesFor } from "../src/lib/commandBuilder";
 import { formatCommand } from "../src/lib/commandLine";
-import { commandLineForHelp, parseFields, parseHelpOutput } from "../src/lib/helpParser";
+import { commandLineForHelp, helpCommandCandidates, parseFields, parseHelpOutput } from "../src/lib/helpParser";
 import type { CommandSpec } from "../src/lib/schema";
 
 describe("commandLineForHelp", () => {
@@ -12,6 +12,14 @@ describe("commandLineForHelp", () => {
 
   it("appends help to plain commands", () => {
     expect(commandLineForHelp("node")).toEqual(["node", "--help"]);
+  });
+
+  it("builds deterministic fallback help candidates", () => {
+    expect(helpCommandCandidates("git commit")).toEqual([
+      ["git", "commit", "--help"],
+      ["git", "commit", "-h"],
+      ["git", "help", "commit"]
+    ]);
   });
 });
 
@@ -121,6 +129,45 @@ describe("representative help fixtures", () => {
       ])
     );
   });
+
+  it("captures positional arguments with low confidence review state", () => {
+    const manifest = parseHelpOutput(readFixture("yt-dlp.txt"), "yt-dlp --help");
+    const positional = manifest.commands[0].fields.find((field) => field.position === 0);
+
+    expect(positional).toEqual(
+      expect.objectContaining({
+        id: "url",
+        label: "URL",
+        kind: "string",
+        required: true,
+        confidence: 0.48
+      })
+    );
+  });
+
+  it("captures top-level subcommands as reviewable command drafts", () => {
+    const manifest = parseHelpOutput(
+      `
+Usage: demo [OPTIONS] COMMAND
+
+Options:
+  --config FILE      config path
+
+Commands:
+  build              build project assets
+  deploy             deploy reviewed project assets
+`,
+      "demo --help"
+    );
+
+    expect(manifest.commands.map((command) => command.name)).toEqual(["demo", "build", "deploy"]);
+    expect(manifest.commands[1]).toEqual(
+      expect.objectContaining({
+        subcommand: ["build"],
+        description: "build project assets"
+      })
+    );
+  });
 });
 
 describe("buildArgs", () => {
@@ -139,6 +186,32 @@ describe("buildArgs", () => {
       "a file.txt",
       "--dry-run"
     ]);
+  });
+});
+
+describe("initialValuesFor", () => {
+  it("does not prefill optional discovered defaults into runnable command values", () => {
+    const command: CommandSpec = {
+      id: "demo",
+      name: "demo",
+      fields: [
+        { id: "mode", label: "Mode", kind: "string", required: false, flag: "--mode", defaultValue: "safe", confidence: 0.82 },
+        { id: "target", label: "Target", kind: "string", required: true, flag: "--target", defaultValue: "localhost", confidence: 0.82 }
+      ]
+    };
+
+    expect(initialValuesFor(command)).toEqual({ mode: "", target: "localhost" });
+  });
+});
+
+describe("default parsing", () => {
+  it("ignores prose about a default value subject", () => {
+    const fields = parseFields(`
+Options:
+  --dns-result-order=...      set default value of verbatim in dns.lookup
+`);
+
+    expect(fields[0].defaultValue).toBeUndefined();
   });
 });
 

@@ -3,14 +3,13 @@ import { spawn } from "node:child_process";
 import { performance } from "node:perf_hooks";
 import { extname, join, normalize, relative, resolve } from "node:path";
 import { readFileSync, statSync } from "node:fs";
-import { commandLineForHelp, parseHelpOutput } from "../src/lib/helpParser";
 import { formatCommand } from "../src/lib/commandLine";
+import { discoverCommand } from "./discovery";
 import type { DiscoveryRequest, DiscoveryResponse, RunEvent, RunRequest } from "../src/lib/schema";
 
 const STATIC_DIR = process.env.GIVEMEUI_STATIC_DIR;
 const HOST = process.env.GIVEMEUI_HOST ?? "127.0.0.1";
 const PORT = Number(process.env.GIVEMEUI_PORT ?? process.env.GIVEMEUI_API_PORT ?? (STATIC_DIR ? 5173 : 5174));
-const DEFAULT_TIMEOUT_MS = 8000;
 
 const server = createServer(async (req, res) => {
   try {
@@ -21,7 +20,7 @@ const server = createServer(async (req, res) => {
 
     if (req.method === "POST" && req.url === "/api/discover") {
       const body = await readJson<DiscoveryRequest>(req);
-      const result = await discover(body);
+      const result = await discoverCommand(body);
       sendJson(res, result);
       return;
     }
@@ -48,64 +47,6 @@ const server = createServer(async (req, res) => {
 server.listen(PORT, HOST, () => {
   console.log(`GIVEMEUI listening on http://${HOST}:${PORT}`);
 });
-
-async function discover(request: DiscoveryRequest): Promise<DiscoveryResponse> {
-  const argv = commandLineForHelp(request.commandLine);
-  if (argv.length === 0) {
-    throw new Error("Enter a command to discover.");
-  }
-
-  const { stdout, stderr, exitCode, timedOut } = await captureCommand(argv[0], argv.slice(1), {
-    cwd: request.cwd,
-    timeoutMs: DEFAULT_TIMEOUT_MS
-  });
-  const helpText = [stdout, stderr].filter(Boolean).join("\n");
-
-  return {
-    manifest: parseHelpOutput(helpText || stderr || stdout, request.commandLine),
-    executed: argv,
-    stderr,
-    exitCode,
-    timedOut
-  };
-}
-
-function captureCommand(
-  executable: string,
-  args: string[],
-  options: { cwd?: string; timeoutMs: number }
-): Promise<{ stdout: string; stderr: string; exitCode: number | null; timedOut: boolean }> {
-  return new Promise((resolve) => {
-    const child = spawn(executable, args, {
-      cwd: options.cwd,
-      shell: false,
-      env: process.env
-    });
-    let stdout = "";
-    let stderr = "";
-    let timedOut = false;
-
-    const timer = setTimeout(() => {
-      timedOut = true;
-      child.kill("SIGTERM");
-    }, options.timeoutMs);
-
-    child.stdout?.on("data", (chunk) => {
-      stdout += chunk.toString();
-    });
-    child.stderr?.on("data", (chunk) => {
-      stderr += chunk.toString();
-    });
-    child.on("error", (error) => {
-      clearTimeout(timer);
-      resolve({ stdout, stderr: stderr || error.message, exitCode: null, timedOut });
-    });
-    child.on("close", (exitCode) => {
-      clearTimeout(timer);
-      resolve({ stdout, stderr, exitCode, timedOut });
-    });
-  });
-}
 
 async function runCommand(request: RunRequest, incoming: IncomingMessage, res: ServerResponse): Promise<void> {
   const argv = [request.executable, ...request.baseArgs, ...request.args].filter(Boolean);

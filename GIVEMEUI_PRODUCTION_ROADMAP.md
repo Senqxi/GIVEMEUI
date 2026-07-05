@@ -297,6 +297,12 @@ Try these in order:
 - The parser works on at least five real-world CLI fixtures.
 - Low-confidence parsing is visible and editable.
 
+### Phase 1 Status
+
+Phase 1 is complete for the open-source baseline. The implemented artifact is tracked in [docs/PHASE_1_DISCOVERY.md](./docs/PHASE_1_DISCOVERY.md).
+
+The next production step is Phase 2: schema review and editing.
+
 ## Phase 2: Schema Review And Editing
 
 ### Objectives

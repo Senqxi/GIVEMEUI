@@ -58,6 +58,33 @@ export type SafetySpec = {
   notes?: string[];
 };
 
+export type ExecutableResolution = {
+  input: string;
+  executable: string;
+  resolvedPath?: string;
+  type: "absolute" | "relative" | "path" | "unresolved";
+  cwd?: string;
+};
+
+export type DiscoveryAttempt = {
+  command: string[];
+  stdoutBytes: number;
+  stderrBytes: number;
+  exitCode: number | null;
+  timedOut: boolean;
+};
+
+export type DiscoveryMetadata = {
+  input: string;
+  resolvedExecutable: string;
+  resolution: ExecutableResolution;
+  helpCommand: string[];
+  helpAttempts: DiscoveryAttempt[];
+  version?: string;
+  versionCommand?: string[];
+  warnings: string[];
+};
+
 export type CommandSpec = {
   id: string;
   name: string;
@@ -78,6 +105,7 @@ export type ToolManifest = {
   version?: string;
   source: ToolSource;
   rawHelp?: string;
+  discovery?: DiscoveryMetadata;
   commands: CommandSpec[];
   createdAt: string;
   updatedAt: string;
@@ -94,6 +122,9 @@ export type DiscoveryResponse = {
   stderr: string;
   exitCode: number | null;
   timedOut: boolean;
+  resolution?: ExecutableResolution;
+  helpAttempts?: DiscoveryAttempt[];
+  version?: string;
 };
 
 export type RunRequest = {
@@ -118,4 +149,3 @@ export function confidenceLevel(confidence: number): ConfidenceLevel {
   if (confidence >= 0.52) return "medium";
   return "low";
 }
-
