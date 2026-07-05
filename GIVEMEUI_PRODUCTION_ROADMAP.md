@@ -2,7 +2,9 @@
 
 This file is the canonical build prompt for GIVEMEUI.
 
-GIVEMEUI is a local-first tool that converts terminal applications, shell commands, and CLI tools into usable graphical interfaces. It should work without AI through deterministic command introspection, and it may optionally use local or cloud AI providers to improve command understanding, output interpretation, and UI generation.
+GIVEMEUI is a local-first command-line companion that converts terminal applications, shell commands, and CLI tools into usable graphical interfaces. It should work without AI through deterministic command introspection, and it may optionally use local or cloud AI providers to improve command understanding, output interpretation, and UI generation.
+
+The product should feel like an extension of the terminal, not a replacement for it. Its purpose is to help users run command-line tools faster by reducing flag memorization, making option selection structured, preserving exact command previews, and saving repeatable workflows.
 
 The production product must not depend on cloud AI. AI is an enhancement layer, not the foundation.
 
@@ -10,7 +12,7 @@ The production product must not depend on cloud AI. AI is an enhancement layer, 
 
 ### Core Goal
 
-Build a production-grade desktop/web application that lets a user point GIVEMEUI at a CLI command and receive a generated UI for configuring, running, monitoring, and understanding that command.
+Build a production-grade desktop/web application that lets a user point GIVEMEUI at a CLI command and receive a generated UI for configuring, running, monitoring, and understanding that command. The UI should act like a practical control panel for the underlying CLI, similar in spirit to how Wireshark gives users a structured interface around packet-capture workflows.
 
 The UI should turn this:
 
@@ -30,11 +32,15 @@ Into a structured interface with:
 - Artifacts and result previews when possible.
 - Saved configurations and repeatable workflows.
 
+The user should never lose sight of the command being run. Advanced users should be able to treat GIVEMEUI as a faster command-composition surface while still trusting the exact executable and arguments.
+
 ### Product Principles
 
 - Local-first by default.
 - No cloud dependency for core functionality.
 - Deterministic parsing before AI inference.
+- Command-line extension, not terminal replacement.
+- Optimize for Linux/macOS command-line workflows first.
 - Human-editable schemas.
 - Safe command execution with clear previews.
 - Generated UIs must be useful immediately, not decorative mockups.
@@ -44,7 +50,9 @@ Into a structured interface with:
 ### Target Users
 
 - Developers who want quick UIs for internal scripts.
+- Linux, Kali Linux, and macOS users who want UI assistance for command-heavy tools.
 - DevOps engineers who want safer wrappers around operational commands.
+- Security practitioners wrapping tools they are authorized to run locally.
 - Data scientists who want forms around Python/R/shell tools.
 - Creators who use tools like `ffmpeg`, `yt-dlp`, `imagemagick`, or `whisper`.
 - Teams that want repeatable GUI workflows without building custom apps.
@@ -57,6 +65,17 @@ Into a structured interface with:
 - Do not require OpenAI or any cloud provider.
 - Do not execute untrusted remote commands without explicit user consent.
 - Do not hide the underlying command from advanced users.
+- Do not provide attack playbooks or unauthorized target guidance for dual-use tools.
+- Do not ship presets that imply credential attacks, unauthorized scanning, or destructive operations.
+
+### Initial Platform Focus
+
+- Debian and Debian-based Linux.
+- Kali Linux.
+- macOS.
+- Unix-like shells and `$PATH` resolution.
+
+Windows support can come later, but V1 should be excellent for local Linux/macOS terminal workflows.
 
 ## Recommended Technical Direction
 
@@ -105,6 +124,10 @@ flowchart TD
 - `storage`: Persists tools, schemas, presets, runs, and user settings.
 - `security`: Handles trust prompts, path validation, command restrictions, and secret handling.
 - `desktop`: Native shell integration, filesystem access, and packaging.
+
+### Design Analogy
+
+GIVEMEUI should do for command-line tools what Wireshark-style interfaces do for packet analysis workflows: expose power through a structured interface without hiding the underlying operation from expert users.
 
 ## Command Schema
 
@@ -484,6 +507,8 @@ Improve quality for popular tools with dedicated adapters.
 - `imagemagick`
 - `git`
 - `docker`
+- `nmap`
+- Authorized security tools such as `hydra`, with explicit sensitive-command metadata and no bundled unauthorized-use presets.
 - `kubectl`
 - `python argparse` scripts
 - `npm` scripts
@@ -823,4 +848,3 @@ Use this prompt when continuing implementation:
 - Add tests before broadening parser support.
 - Make every generated command auditable.
 - Optimize for trustworthy daily use.
-

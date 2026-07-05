@@ -27,6 +27,8 @@ Include:
 - Imported schemas are treated as untrusted.
 - Secret fields should not be saved into reusable presets or run logs.
 - Cloud AI must be opt-in and must not execute commands.
+- Dual-use security tools should show explicit command previews and sensitive-operation metadata.
+- The project should not ship presets or examples that imply unauthorized access, credential attacks, or destructive activity.
 
 ## Out Of Scope
 

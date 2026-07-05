@@ -1,8 +1,10 @@
 # GIVEMEUI
 
-GIVEMEUI is a local-first tool that converts terminal commands into generated graphical interfaces.
+GIVEMEUI is a local-first command-line companion that converts terminal tools into generated graphical interfaces.
 
-It is intended to be an MIT-licensed open-source tool that users can install from GitHub or a package registry, run from their CLI, and use locally without a hosted backend.
+It is intended to be an MIT-licensed open-source tool that users can install from GitHub or a package registry, run from their CLI, and use locally without a hosted backend. The goal is not to replace the terminal; it is to make command-line tools faster to configure, safer to preview, and easier to repeat.
+
+Think of it like a Wireshark-style UI layer for terminal workflows: the underlying CLI stays in control, while GIVEMEUI helps users select flags, manage presets, run commands, and inspect output.
 
 This alpha slice focuses on deterministic behavior:
 
@@ -17,6 +19,16 @@ This alpha slice focuses on deterministic behavior:
 - Import/export command schemas as JSON.
 
 Cloud AI is not required. AI provider support will be added later as an optional enhancement layer.
+
+## Target Systems
+
+GIVEMEUI starts with Unix-like systems:
+
+- Debian and Debian-based Linux.
+- Kali Linux.
+- macOS.
+
+It should work with ordinary developer tools, media tools, scripts, automation tools, and authorized security tools that users already run locally. Sensitive tools still require clear command previews, local trust, and responsible use.
 
 ## Install From Source
 
@@ -95,6 +107,7 @@ npm run pack:check
 - Contributions: [CONTRIBUTING.md](./CONTRIBUTING.md)
 - Security: [SECURITY.md](./SECURITY.md)
 - Changelog: [CHANGELOG.md](./CHANGELOG.md)
+- Product direction: [docs/PRODUCT.md](./docs/PRODUCT.md)
 - Release process: [docs/RELEASE.md](./docs/RELEASE.md)
 
 ## License

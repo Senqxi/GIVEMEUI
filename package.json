@@ -18,6 +18,7 @@
   "files": [
     "bin/",
     "dist/",
+    "docs/",
     "server/",
     "src/lib/",
     "public/",
