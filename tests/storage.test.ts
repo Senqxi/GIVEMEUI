@@ -17,6 +17,7 @@ describe("workspace storage helpers", () => {
 
     expect(next.activeToolId).toBe("imported-tool");
     expect(next.manifests.map((manifest) => manifest.id)).toContain("imported-tool");
+    expect(next.manifests.find((manifest) => manifest.id === "imported-tool")?.schemaVersion).toBe(1);
   });
 
   it("trims run history to the local retention limit", () => {

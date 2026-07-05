@@ -97,6 +97,7 @@ export type CommandSpec = {
 };
 
 export type ToolManifest = {
+  schemaVersion: 1;
   id: string;
   name: string;
   description?: string;

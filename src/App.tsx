@@ -24,7 +24,6 @@ import {
   appendPreset,
   appendRun,
   createStorageId,
-  isToolManifest,
   loadWorkspace,
   persistWorkspace,
   redactSecretValues,
@@ -33,7 +32,8 @@ import {
   type StoredRun,
   type WorkspaceState
 } from "./lib/storage";
-import { confidenceLevel, type CommandSpec, type FieldKind, type FieldSpec, type RunEvent, type ToolManifest } from "./lib/schema";
+import { confidenceLevel, type CommandSpec, type FieldKind, type FieldSpec, type FieldUiHints, type RunEvent, type ToolManifest } from "./lib/schema";
+import { isReviewField, normalizeToolManifest, validateToolManifest, type SchemaValidationResult } from "./lib/schemaValidation";
 
 type ConsoleLine = {
   id: string;
@@ -59,6 +59,21 @@ type RunCapture = {
   stdout: string;
   stderr: string;
   startedAt: string;
+};
+
+type FieldDraft = {
+  label: string;
+  description: string;
+  kind: FieldKind;
+  group: string;
+  defaultValue: string;
+  placeholder: string;
+  choices: string;
+  validationMin: string;
+  validationMax: string;
+  validationPattern: string;
+  required: boolean;
+  advanced: boolean;
 };
 
 const FIELD_KINDS: FieldKind[] = ["string", "number", "boolean", "enum", "file", "directory", "multi-file", "secret", "array", "raw"];
@@ -107,6 +122,7 @@ export function App() {
   const commandPresets = useMemo(() => {
     return workspaceState.presets.filter((preset) => preset.toolId === manifest.id && preset.commandId === selectedCommand.id);
   }, [manifest.id, selectedCommand.id, workspaceState.presets]);
+  const schemaValidation = useMemo(() => validateToolManifest(manifest), [manifest]);
 
   const fieldStats = useMemo(() => {
     const total = selectedCommand.fields.length || 1;
@@ -381,20 +397,24 @@ export function App() {
 
     try {
       const parsed: unknown = JSON.parse(pasted);
-      if (!isToolManifest(parsed)) {
-        throw new Error("JSON is not a valid ToolManifest.");
+      const validation = validateToolManifest(parsed);
+      if (!validation.valid) {
+        throw new Error(`Schema import failed: ${validation.errors.slice(0, 3).join(" ")}`);
       }
 
       const imported: ToolManifest = {
-        ...parsed,
-        source: parsed.source ?? "imported",
+        ...normalizeToolManifest(parsed as ToolManifest),
+        source: "imported",
         updatedAt: new Date().toISOString()
       };
       commitWorkspace((current) => upsertManifest(current, imported));
       setSelectedCommandId(imported.commands[0].id);
-      setSelectedFieldId(imported.commands[0].fields[0]?.id ?? null);
+      setSelectedFieldId(imported.commands[0].fields.find(isReviewField)?.id ?? imported.commands[0].fields[0]?.id ?? null);
       setValues(initialValuesFor(imported.commands[0]));
-      appendConsole("system", `Imported schema for ${imported.name}.`);
+      appendConsole(
+        "system",
+        `Imported schema for ${imported.name}. ${validation.warnings.length ? `${validation.warnings.length} review warnings.` : "Opened in review mode."}`
+      );
     } catch (error) {
       appendConsole("stderr", error instanceof Error ? error.message : "Schema import failed.");
     }
@@ -498,6 +518,7 @@ export function App() {
             <FieldInspector
               fields={selectedCommand.fields}
               manifest={manifest}
+              validation={schemaValidation}
               selectedField={selectedField}
               selectedFieldId={selectedField?.id ?? null}
               onFieldSelect={setSelectedFieldId}
@@ -879,6 +900,7 @@ function ConfidenceBar({ label, value, total }: { label: string; value: number; 
 function FieldInspector({
   fields,
   manifest,
+  validation,
   selectedField,
   selectedFieldId,
   onFieldSelect,
@@ -886,26 +908,52 @@ function FieldInspector({
 }: {
   fields: FieldSpec[];
   manifest: ToolManifest;
+  validation: SchemaValidationResult;
   selectedField: FieldSpec | null;
   selectedFieldId: string | null;
   onFieldSelect: (fieldId: string) => void;
   onFieldUpdate: (fieldId: string, patch: Partial<FieldSpec>) => void;
 }) {
+  const [filter, setFilter] = useState<"all" | "review">("all");
+  const reviewCount = fields.filter(isReviewField).length;
+  const visibleFields = filter === "review" ? fields.filter(isReviewField) : fields;
+
   return (
     <div className="field-inspector">
+      <SchemaValidationPanel validation={validation} />
+      <div className="review-toolbar">
+        <button className={filter === "all" ? "selected" : ""} onClick={() => setFilter("all")} data-testid="field-filter-all">
+          All Fields
+        </button>
+        <button className={filter === "review" ? "selected" : ""} onClick={() => setFilter("review")} data-testid="field-filter-review">
+          Needs Review <span>{reviewCount}</span>
+        </button>
+      </div>
       <div className="inspector-list">
-        {fields.map((field) => {
+        <div className="field-table-head">
+          <span>Field</span>
+          <span>Type</span>
+          <span>Confidence</span>
+        </div>
+        {visibleFields.map((field) => {
           const level = confidenceLevel(field.confidence);
           return (
-            <button className={`inspector-row ${selectedFieldId === field.id ? "selected" : ""}`} onClick={() => onFieldSelect(field.id)} key={field.id}>
+            <button
+              className={`inspector-row ${selectedFieldId === field.id ? "selected" : ""}`}
+              onClick={() => onFieldSelect(field.id)}
+              key={field.id}
+              data-testid={`schema-field-${field.id}`}
+            >
               <div>
                 <strong>{field.label}</strong>
                 <small>{field.flag ?? field.shortFlag ?? field.kind}</small>
               </div>
+              <code>{field.kind}</code>
               <span className={`confidence-pill ${level}`}>{level}</span>
             </button>
           );
         })}
+        {visibleFields.length === 0 ? <div className="empty-review-list">No fields need review.</div> : null}
       </div>
       {selectedField ? <FieldDetailEditor field={selectedField} onUpdate={(patch) => onFieldUpdate(selectedField.id, patch)} /> : null}
       <SchemaSourceView manifest={manifest} />
@@ -914,26 +962,37 @@ function FieldInspector({
 }
 
 function FieldDetailEditor({ field, onUpdate }: { field: FieldSpec; onUpdate: (patch: Partial<FieldSpec>) => void }) {
-  const choicesValue = field.choices?.join(", ") ?? "";
+  const [draft, setDraft] = useState<FieldDraft>(() => createFieldDraft(field));
+
+  useEffect(() => {
+    setDraft(createFieldDraft(field));
+  }, [field]);
+
+  const cleanDraft = createFieldDraft(field);
+  const isDirty = JSON.stringify(draft) !== JSON.stringify(cleanDraft);
+  const canSave = draft.label.trim().length > 0;
 
   return (
     <section className="field-detail-editor">
       <div className="editor-heading">
-        <strong>{field.label}</strong>
+        <span>
+          <strong>{field.label}</strong>
+          <small>{confidenceLevel(field.confidence)} confidence</small>
+        </span>
         <code>{field.flag ?? field.shortFlag ?? field.id}</code>
       </div>
       <label className="editor-field">
         <span>Label</span>
-        <input value={field.label} onChange={(event) => onUpdate({ label: event.target.value })} />
+        <input value={draft.label} onChange={(event) => setDraft((current) => ({ ...current, label: event.target.value }))} data-testid="field-editor-label" />
       </label>
       <label className="editor-field">
         <span>Description</span>
-        <textarea value={field.description ?? ""} onChange={(event) => onUpdate({ description: event.target.value })} />
+        <textarea value={draft.description} onChange={(event) => setDraft((current) => ({ ...current, description: event.target.value }))} />
       </label>
       <div className="editor-grid-two">
         <label className="editor-field">
           <span>Type</span>
-          <select value={field.kind} onChange={(event) => onUpdate({ kind: event.target.value as FieldKind })}>
+          <select value={draft.kind} onChange={(event) => setDraft((current) => ({ ...current, kind: event.target.value as FieldKind }))}>
             {FIELD_KINDS.map((kind) => (
               <option value={kind} key={kind}>
                 {kind}
@@ -944,44 +1003,171 @@ function FieldDetailEditor({ field, onUpdate }: { field: FieldSpec; onUpdate: (p
         <label className="editor-field">
           <span>Group</span>
           <input
-            value={field.ui?.group ?? ""}
-            onChange={(event) => onUpdate({ ui: { ...field.ui, group: event.target.value.trim() || undefined } })}
+            value={draft.group}
+            onChange={(event) => setDraft((current) => ({ ...current, group: event.target.value }))}
           />
         </label>
       </div>
       <div className="editor-grid-two">
         <label className="editor-field">
           <span>Default</span>
-          <input value={String(field.defaultValue ?? "")} onChange={(event) => onUpdate({ defaultValue: event.target.value })} />
+          <input value={draft.defaultValue} onChange={(event) => setDraft((current) => ({ ...current, defaultValue: event.target.value }))} />
         </label>
         <label className="editor-field">
           <span>Placeholder</span>
-          <input value={field.placeholder ?? ""} onChange={(event) => onUpdate({ placeholder: event.target.value })} />
+          <input value={draft.placeholder} onChange={(event) => setDraft((current) => ({ ...current, placeholder: event.target.value }))} />
         </label>
       </div>
       <label className="editor-field">
         <span>Choices</span>
         <input
-          value={choicesValue}
-          onChange={(event) => onUpdate({ choices: event.target.value.split(",").map((choice) => choice.trim()).filter(Boolean) })}
+          value={draft.choices}
+          onChange={(event) => setDraft((current) => ({ ...current, choices: event.target.value }))}
         />
       </label>
+      <div className="editor-grid-three">
+        <label className="editor-field">
+          <span>Min</span>
+          <input value={draft.validationMin} onChange={(event) => setDraft((current) => ({ ...current, validationMin: event.target.value }))} />
+        </label>
+        <label className="editor-field">
+          <span>Max</span>
+          <input value={draft.validationMax} onChange={(event) => setDraft((current) => ({ ...current, validationMax: event.target.value }))} />
+        </label>
+        <label className="editor-field">
+          <span>Pattern</span>
+          <input value={draft.validationPattern} onChange={(event) => setDraft((current) => ({ ...current, validationPattern: event.target.value }))} />
+        </label>
+      </div>
       <div className="editor-checks">
         <label className="editor-check">
-          <input type="checkbox" checked={field.required} onChange={(event) => onUpdate({ required: event.target.checked })} />
+          <input type="checkbox" checked={draft.required} onChange={(event) => setDraft((current) => ({ ...current, required: event.target.checked }))} />
           Required
         </label>
         <label className="editor-check">
           <input
             type="checkbox"
-            checked={field.ui?.advanced === true}
-            onChange={(event) => onUpdate({ ui: { ...field.ui, advanced: event.target.checked } })}
+            checked={draft.advanced}
+            onChange={(event) => setDraft((current) => ({ ...current, advanced: event.target.checked }))}
           />
           Advanced
         </label>
       </div>
+      <div className="editor-actions">
+        <button className="mini-button" onClick={() => setDraft(cleanDraft)} disabled={!isDirty} data-testid="discard-field-draft">
+          Discard
+        </button>
+        <button className="primary-button compact-button" onClick={() => onUpdate(fieldPatchFromDraft(field, draft))} disabled={!isDirty || !canSave} data-testid="save-field-draft">
+          Save Field
+        </button>
+      </div>
     </section>
   );
+}
+
+function SchemaValidationPanel({ validation }: { validation: SchemaValidationResult }) {
+  if (validation.valid && validation.warnings.length === 0) {
+    return (
+      <section className="schema-health valid">
+        <CheckCircle2 size={15} />
+        <span>Schema valid</span>
+      </section>
+    );
+  }
+
+  return (
+    <section className={`schema-health ${validation.valid ? "warning" : "invalid"}`}>
+      <AlertTriangle size={15} />
+      <span>{validation.valid ? `${validation.warnings.length} review warning${validation.warnings.length === 1 ? "" : "s"}` : validation.errors[0]}</span>
+    </section>
+  );
+}
+
+function createFieldDraft(field: FieldSpec): FieldDraft {
+  return {
+    label: field.label,
+    description: field.description ?? "",
+    kind: field.kind,
+    group: field.ui?.group ?? "",
+    defaultValue: stringifyDefaultValue(field.defaultValue),
+    placeholder: field.placeholder ?? "",
+    choices: field.choices?.join(", ") ?? "",
+    validationMin: field.validation?.min !== undefined ? String(field.validation.min) : "",
+    validationMax: field.validation?.max !== undefined ? String(field.validation.max) : "",
+    validationPattern: field.validation?.pattern ?? "",
+    required: field.required,
+    advanced: field.ui?.advanced === true
+  };
+}
+
+function fieldPatchFromDraft(field: FieldSpec, draft: FieldDraft): Partial<FieldSpec> {
+  const validation = validationFromDraft(draft);
+
+  return {
+    label: draft.label.trim(),
+    description: draft.description.trim() || undefined,
+    kind: draft.kind,
+    required: draft.required,
+    defaultValue: defaultValueFromDraft(draft),
+    choices: choicesFromDraft(draft),
+    placeholder: draft.placeholder.trim() || undefined,
+    validation,
+    ui: {
+      ...field.ui,
+      group: draft.group.trim() || undefined,
+      advanced: draft.advanced,
+      control: controlForKind(draft.kind, field.ui?.control)
+    }
+  };
+}
+
+function defaultValueFromDraft(draft: FieldDraft): FieldSpec["defaultValue"] | undefined {
+  const raw = draft.defaultValue.trim();
+  if (!raw) return undefined;
+  if (draft.kind === "number") {
+    const value = Number(raw);
+    return Number.isFinite(value) ? value : undefined;
+  }
+  if (draft.kind === "boolean") return raw === "true";
+  if (draft.kind === "array" || draft.kind === "multi-file") {
+    return raw.split(",").map((item) => item.trim()).filter(Boolean);
+  }
+  return raw;
+}
+
+function validationFromDraft(draft: FieldDraft): FieldSpec["validation"] | undefined {
+  const min = draft.validationMin.trim() === "" ? undefined : Number(draft.validationMin);
+  const max = draft.validationMax.trim() === "" ? undefined : Number(draft.validationMax);
+  const pattern = draft.validationPattern.trim() || undefined;
+  const validation = {
+    min: Number.isFinite(min) ? min : undefined,
+    max: Number.isFinite(max) ? max : undefined,
+    pattern
+  };
+
+  return validation.min !== undefined || validation.max !== undefined || validation.pattern ? validation : undefined;
+}
+
+function choicesFromDraft(draft: FieldDraft): string[] | undefined {
+  const choices = draft.choices
+    .split(",")
+    .map((choice) => choice.trim())
+    .filter(Boolean);
+  return choices.length > 0 ? choices : undefined;
+}
+
+function controlForKind(kind: FieldKind, current?: FieldUiHints["control"]): FieldUiHints["control"] | undefined {
+  if (kind === "boolean") return "switch";
+  if (kind === "enum") return "select";
+  if (kind === "number") return "number";
+  if (kind === "file" || kind === "multi-file") return "file";
+  return current === "switch" || current === "select" || current === "number" || current === "file" ? undefined : current;
+}
+
+function stringifyDefaultValue(value: FieldSpec["defaultValue"]): string {
+  if (value === undefined) return "";
+  if (Array.isArray(value)) return value.join(", ");
+  return String(value);
 }
 
 function SchemaSourceView({ manifest }: { manifest: ToolManifest }) {

@@ -1,5 +1,6 @@
 import type { FieldValues } from "./commandBuilder";
 import type { CommandSpec, FieldKind, FieldSpec, ToolManifest, ToolSource } from "./schema";
+import { normalizeToolManifest } from "./schemaValidation";
 
 const STORAGE_KEY = "givemeui.workspace.v1";
 const MAX_RUNS = 60;
@@ -49,7 +50,7 @@ export function loadWorkspace(fallbackManifest: ToolManifest): WorkspaceState {
     if (!raw) return createWorkspace(fallbackManifest);
 
     const parsed = JSON.parse(raw) as Partial<WorkspaceState>;
-    const manifests = Array.isArray(parsed.manifests) ? parsed.manifests.filter(isToolManifest) : [];
+    const manifests = Array.isArray(parsed.manifests) ? parsed.manifests.filter(isToolManifest).map(normalizeToolManifest) : [];
     const state: WorkspaceState = {
       schemaVersion: 1,
       manifests: manifests.length > 0 ? manifests : [fallbackManifest],
@@ -81,7 +82,7 @@ export function persistWorkspace(state: WorkspaceState): void {
 export function createWorkspace(fallbackManifest: ToolManifest): WorkspaceState {
   return {
     schemaVersion: 1,
-    manifests: [fallbackManifest],
+    manifests: [normalizeToolManifest(fallbackManifest)],
     activeToolId: fallbackManifest.id,
     presets: [],
     runs: []
@@ -89,16 +90,17 @@ export function createWorkspace(fallbackManifest: ToolManifest): WorkspaceState 
 }
 
 export function upsertManifest(state: WorkspaceState, manifest: ToolManifest): WorkspaceState {
-  const existingIndex = state.manifests.findIndex((current) => current.id === manifest.id);
+  const normalizedManifest = normalizeToolManifest(manifest);
+  const existingIndex = state.manifests.findIndex((current) => current.id === normalizedManifest.id);
   const manifests =
     existingIndex >= 0
-      ? state.manifests.map((current, index) => (index === existingIndex ? manifest : current))
-      : [manifest, ...state.manifests];
+      ? state.manifests.map((current, index) => (index === existingIndex ? normalizedManifest : current))
+      : [normalizedManifest, ...state.manifests];
 
   return {
     ...state,
     manifests,
-    activeToolId: manifest.id
+    activeToolId: normalizedManifest.id
   };
 }
 
@@ -137,6 +139,7 @@ export function isToolManifest(value: unknown): value is ToolManifest {
   const manifest = value as Partial<ToolManifest>;
   return (
     typeof manifest.id === "string" &&
+    (manifest.schemaVersion === undefined || manifest.schemaVersion === 1) &&
     typeof manifest.name === "string" &&
     typeof manifest.executable === "string" &&
     typeof manifest.source === "string" &&

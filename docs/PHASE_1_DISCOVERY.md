@@ -53,9 +53,11 @@ Automated tests cover:
 - Framework-specific adapters for `click`, `typer`, `cobra`, `clap`, `commander`, and `yargs` are still future work.
 - Low-confidence fields are editable in schema review, but there is not yet a dedicated review queue.
 
-## Next Production Step
+## Handoff
 
-Phase 2 should deepen schema review and editing:
+Phase 2 is now tracked in [Phase 2 schema review and editing](./PHASE_2_SCHEMA_REVIEW.md).
+
+Phase 2 deepened schema review and editing with:
 
 - field table and detail review improvements
 - explicit low-confidence review workflow

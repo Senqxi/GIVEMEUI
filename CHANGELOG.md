@@ -18,6 +18,7 @@ This project follows the spirit of semantic versioning while it is pre-1.0: mino
 - MIT license, CI, issue templates, and release packaging scaffolding.
 - Phase 0 production groundwork docs and representative CLI help fixtures.
 - Phase 1 deterministic discovery with executable resolution, version capture, help fallbacks, positional parsing, subcommand drafts, and UI discovery metadata.
+- Phase 2 schema review workflow with schema versioning, validation, field table filtering, draft Save/Discard controls, and richer field editing.
 
 ### Security
 
@@ -25,6 +26,7 @@ This project follows the spirit of semantic versioning while it is pre-1.0: mino
 - Secret field values are redacted before reusable persistence.
 - Initial threat model for local command wrapping, schema review, and dual-use tool boundaries.
 - Discovery records unresolved executable warnings and keeps generated schemas reviewable before execution.
+- Imported schemas are validated and normalized before entering the local workspace.
 
 ## [0.1.0] - TBD
 

@@ -681,16 +681,91 @@ button:not(:disabled):hover {
   padding: 10px;
 }
 
+.schema-health {
+  display: flex;
+  gap: 7px;
+  align-items: center;
+  min-height: 34px;
+  margin-bottom: 8px;
+  padding: 8px 9px;
+  border-radius: 7px;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.schema-health.valid {
+  border: 1px solid #cfe2dd;
+  color: var(--success);
+  background: #f0fbf6;
+}
+
+.schema-health.warning,
+.schema-health.invalid {
+  border: 1px solid #f0d39a;
+  color: #7a4c08;
+  background: #fff8e7;
+}
+
+.review-toolbar {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.review-toolbar button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 30px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: #ffffff;
+  color: var(--muted-strong);
+  font-size: 12px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.review-toolbar button.selected {
+  border-color: #b9deda;
+  background: #edfafa;
+  color: var(--accent-dark);
+}
+
+.review-toolbar span {
+  display: inline-grid;
+  place-items: center;
+  min-width: 20px;
+  min-height: 20px;
+  border-radius: 999px;
+  background: var(--surface-strong);
+  color: var(--muted-strong);
+  font-size: 11px;
+}
+
 .inspector-list {
   display: grid;
   gap: 2px;
 }
 
+.field-table-head {
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) 68px 72px;
+  gap: 8px;
+  padding: 4px 8px 7px;
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
 .inspector-row {
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) 68px 72px;
   align-items: center;
-  justify-content: space-between;
-  gap: 10px;
+  gap: 8px;
   min-height: 54px;
   padding: 10px 8px;
   border-bottom: 1px solid var(--line);
@@ -728,9 +803,24 @@ button:not(:disabled):hover {
   white-space: nowrap;
 }
 
+.inspector-row > code {
+  overflow: hidden;
+  color: var(--muted-strong);
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.empty-review-list {
+  padding: 12px 8px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
 .confidence-pill {
   flex: 0 0 auto;
-  min-width: 58px;
+  min-width: 0;
   padding: 4px 7px;
   border-radius: 999px;
   text-align: center;
@@ -771,12 +861,24 @@ button:not(:disabled):hover {
   min-width: 0;
 }
 
+.editor-heading span {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
 .editor-heading strong {
   min-width: 0;
   overflow: hidden;
   font-size: 13px;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.editor-heading small {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 800;
 }
 
 .editor-heading code,
@@ -829,6 +931,18 @@ button:not(:disabled):hover {
 .editor-grid-two {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 8px;
+}
+
+.editor-grid-three {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.editor-actions {
+  display: flex;
+  justify-content: flex-end;
   gap: 8px;
 }
 

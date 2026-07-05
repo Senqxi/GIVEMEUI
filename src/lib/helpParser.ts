@@ -69,6 +69,7 @@ export function parseHelpOutput(
 
   const now = new Date().toISOString();
   return {
+    schemaVersion: 1,
     id: stableId(`${name}-${baseArgs.join("-") || "root"}`),
     name,
     executable,

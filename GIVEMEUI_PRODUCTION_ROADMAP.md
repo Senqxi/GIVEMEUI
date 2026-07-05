@@ -343,6 +343,12 @@ Make generated schemas trustworthy by letting users inspect and correct them.
 - Exported schema can be re-imported.
 - Invalid schemas show actionable validation errors.
 
+### Phase 2 Status
+
+Phase 2 is complete for the open-source baseline. The implemented artifact is tracked in [docs/PHASE_2_SCHEMA_REVIEW.md](./docs/PHASE_2_SCHEMA_REVIEW.md).
+
+The next production step is Phase 3: UI generator.
+
 ## Phase 3: UI Generator
 
 ### Objectives
