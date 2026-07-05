@@ -16,7 +16,8 @@ import {
   Terminal,
   Wrench
 } from "./components/icons";
-import { discoverTool, runCommandStream } from "./lib/api";
+import { detectAiProviders, discoverTool, runCommandStream, summarizeRunOutput as summarizeRunOutputWithAi, suggestSchemaPatch as suggestSchemaPatchWithAi } from "./lib/api";
+import { isAiEnabled, normalizeAiSettings, type AiCompletion, type AiProviderDetection, type AiSchemaSuggestion, type AiSettings } from "./lib/ai";
 import { buildCommandPreview, buildRunRequest, initialValuesFor, type FieldValues } from "./lib/commandBuilder";
 import { formatCommand } from "./lib/commandLine";
 import { analyzeRunOutput, type OutputAnalysis, type OutputArtifact } from "./lib/outputAnalysis";
@@ -122,6 +123,13 @@ export function App() {
   const [isDiscovering, setIsDiscovering] = useState(false);
   const [activeConsoleTab, setActiveConsoleTab] = useState<ConsoleTab>("all");
   const [runSettings, setRunSettings] = useState<RunSettings>(DEFAULT_RUN_SETTINGS);
+  const [showAiSettings, setShowAiSettings] = useState(false);
+  const [aiDetections, setAiDetections] = useState<AiProviderDetection[]>([]);
+  const [aiStatus, setAiStatus] = useState<string>("");
+  const [schemaSuggestions, setSchemaSuggestions] = useState<AiSchemaSuggestion[]>([]);
+  const [schemaSuggestionStatus, setSchemaSuggestionStatus] = useState<string>("");
+  const [aiExplanation, setAiExplanation] = useState<AiCompletion | null>(null);
+  const [aiExplaining, setAiExplaining] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
   const runCaptureRef = useRef<RunCapture | null>(null);
 
@@ -174,6 +182,117 @@ export function App() {
       persistWorkspace(next);
       return next;
     });
+  }
+
+  function handleSaveAiSettings(settings: AiSettings) {
+    const normalized = normalizeAiSettings(settings);
+    commitWorkspace((current) => ({ ...current, aiSettings: normalized }));
+    setAiStatus(normalized.mode === "none" ? "AI disabled. Deterministic mode is active." : `Saved ${normalized.mode} settings.`);
+  }
+
+  async function handleDetectAiProviders() {
+    setAiStatus("Detecting local AI providers...");
+    try {
+      const detections = await detectAiProviders();
+      setAiDetections(detections);
+      const available = detections.filter((item) => item.available);
+      setAiStatus(available.length > 0 ? `Detected ${available.length} local provider${available.length === 1 ? "" : "s"}.` : "No local AI providers detected.");
+    } catch (error) {
+      setAiStatus(error instanceof Error ? error.message : "Provider detection failed.");
+    }
+  }
+
+  async function handleRequestSchemaSuggestions() {
+    if (!isAiEnabled(workspaceState.aiSettings)) {
+      setSchemaSuggestionStatus("Enable a local AI provider in Settings before requesting suggestions.");
+      return;
+    }
+
+    setSchemaSuggestionStatus("Requesting reviewable schema suggestions...");
+    try {
+      const result = await suggestSchemaPatchWithAi(workspaceState.aiSettings, manifest);
+      setSchemaSuggestions(result.suggestions);
+      setSchemaSuggestionStatus(
+        result.suggestions.length > 0
+          ? `${result.suggestions.length} suggestion${result.suggestions.length === 1 ? "" : "s"} ready for review.`
+          : "Provider returned no applicable schema suggestions."
+      );
+    } catch (error) {
+      setSchemaSuggestionStatus(error instanceof Error ? error.message : "Schema suggestion failed.");
+    }
+  }
+
+  function handleApplySchemaSuggestion(suggestion: AiSchemaSuggestion) {
+    commitWorkspace((current) => {
+      const now = new Date().toISOString();
+      return {
+        ...current,
+        manifests: current.manifests.map((tool) => {
+          if (tool.id !== manifest.id) return tool;
+
+          return {
+            ...tool,
+            source: "ai-enhanced",
+            updatedAt: now,
+            commands: tool.commands.map((command) => {
+              if (command.id !== suggestion.commandId) return command;
+
+              return {
+                ...command,
+                fields: command.fields.map((field) => {
+                  if (field.id !== suggestion.fieldId) return field;
+                  return {
+                    ...field,
+                    label: suggestion.label ?? field.label,
+                    description: suggestion.description ?? field.description,
+                    ui: suggestion.group ? { ...field.ui, group: suggestion.group } : field.ui
+                  };
+                })
+              };
+            })
+          };
+        })
+      };
+    });
+    setSchemaSuggestions((current) => current.filter((item) => item !== suggestion));
+    appendConsole("system", `Applied AI schema suggestion for ${suggestion.fieldId}.`);
+  }
+
+  function handleDismissSchemaSuggestion(suggestion: AiSchemaSuggestion) {
+    setSchemaSuggestions((current) => current.filter((item) => item !== suggestion));
+  }
+
+  async function handleExplainOutput(stdout: string, stderr: string, analysis: OutputAnalysis) {
+    if (!isAiEnabled(workspaceState.aiSettings)) {
+      setAiExplanation({
+        provider: "none",
+        model: "",
+        text: "AI is disabled. Enable a local provider in Settings to explain captured output.",
+        createdAt: new Date().toISOString()
+      });
+      return;
+    }
+
+    setAiExplaining(true);
+    try {
+      const result = await summarizeRunOutputWithAi({
+        settings: workspaceState.aiSettings,
+        command: runState.command.length > 0 ? formatCommand(runState.command) : commandPreview,
+        stdout,
+        stderr,
+        analysis
+      });
+      setAiExplanation(result);
+    } catch (error) {
+      setAiExplanation({
+        provider: workspaceState.aiSettings.mode,
+        model: workspaceState.aiSettings.model,
+        text: error instanceof Error ? error.message : "AI output explanation failed.",
+        createdAt: new Date().toISOString()
+      });
+    } finally {
+      setAiExplaining(false);
+    }
   }
 
   async function handleDiscover() {
@@ -496,10 +615,12 @@ export function App() {
     <main className="app-shell">
       <Sidebar
         activeToolId={manifest.id}
+        aiSettings={workspaceState.aiSettings}
         manifests={workspaceState.manifests}
         runCount={workspaceState.runs.length}
         onNewTool={handleNewTool}
         onSelectManifest={handleSelectManifest}
+        onSettings={() => setShowAiSettings(true)}
         onShowRuns={() => setActiveConsoleTab("all")}
       />
       <section className="workspace">
@@ -577,6 +698,15 @@ export function App() {
             />
             <ToolDiscoveryPanel manifest={manifest} />
             <SchemaSummary fields={selectedCommand.fields} stats={fieldStats} />
+            <AiSchemaReviewPanel
+              command={selectedCommand}
+              settings={workspaceState.aiSettings}
+              status={schemaSuggestionStatus}
+              suggestions={schemaSuggestions}
+              onApply={handleApplySchemaSuggestion}
+              onDismiss={handleDismissSchemaSuggestion}
+              onRequest={handleRequestSchemaSuggestions}
+            />
             <FieldInspector
               fields={selectedCommand.fields}
               manifest={manifest}
@@ -590,31 +720,49 @@ export function App() {
         </div>
         <OutputConsole
           activeTab={activeConsoleTab}
+          aiExplanation={aiExplanation}
+          aiExplaining={aiExplaining}
+          aiSettings={workspaceState.aiSettings}
           lines={consoleLines}
           runs={workspaceState.runs}
           runState={runState}
+          onExplainOutput={handleExplainOutput}
           onRerun={handleRun}
           onRunSelect={handleSelectRun}
           onTabChange={setActiveConsoleTab}
         />
       </section>
+      {showAiSettings ? (
+        <AiSettingsPanel
+          detections={aiDetections}
+          settings={workspaceState.aiSettings}
+          status={aiStatus}
+          onClose={() => setShowAiSettings(false)}
+          onDetect={() => void handleDetectAiProviders()}
+          onSave={handleSaveAiSettings}
+        />
+      ) : null}
     </main>
   );
 }
 
 function Sidebar({
   activeToolId,
+  aiSettings,
   manifests,
   runCount,
   onNewTool,
   onSelectManifest,
+  onSettings,
   onShowRuns
 }: {
   activeToolId: string;
+  aiSettings: AiSettings;
   manifests: ToolManifest[];
   runCount: number;
   onNewTool: () => void;
   onSelectManifest: (toolId: string) => void;
+  onSettings: () => void;
   onShowRuns: () => void;
 }) {
   return (
@@ -659,9 +807,9 @@ function Sidebar({
       <div className="sidebar-footer">
         <div className="local-state">
           <BotOff size={15} />
-          <span>AI Optional</span>
+          <span>{aiSettings.mode === "none" ? "AI Optional" : `AI ${aiSettings.mode}`}</span>
         </div>
-        <button className="icon-text-button">
+        <button className="icon-text-button" data-testid="ai-settings-button" onClick={onSettings}>
           <Settings2 size={15} />
           Settings
         </button>
@@ -699,6 +847,102 @@ function DiscoveryBar({
         {isDiscovering ? "Discovering" : "Discover"}
       </button>
     </header>
+  );
+}
+
+function AiSettingsPanel({
+  detections,
+  settings,
+  status,
+  onClose,
+  onDetect,
+  onSave
+}: {
+  detections: AiProviderDetection[];
+  settings: AiSettings;
+  status: string;
+  onClose: () => void;
+  onDetect: () => void;
+  onSave: (settings: AiSettings) => void;
+}) {
+  const [draft, setDraft] = useState<AiSettings>(() => normalizeAiSettings(settings));
+
+  useEffect(() => {
+    setDraft(normalizeAiSettings(settings));
+  }, [settings]);
+
+  function updateMode(mode: AiSettings["mode"]) {
+    setDraft(normalizeAiSettings({ ...draft, mode, endpoint: "", model: "" }));
+  }
+
+  return (
+    <div className="settings-backdrop" role="dialog" aria-modal="true">
+      <section className="settings-panel">
+        <div className="settings-header">
+          <span>
+            <strong>AI Settings</strong>
+            <small>Optional local enhancement layer</small>
+          </span>
+          <button className="mini-button" onClick={onClose}>
+            Close
+          </button>
+        </div>
+        <div className="settings-body">
+          <label className="editor-field">
+            <span>Provider</span>
+            <select value={draft.mode} onChange={(event) => updateMode(event.target.value as AiSettings["mode"])}>
+              <option value="none">None - deterministic only</option>
+              <option value="ollama">Ollama - local</option>
+              <option value="lm-studio">LM Studio - local</option>
+              <option value="local-openai-compatible">OpenAI-compatible local server</option>
+              <option value="openai">OpenAI cloud - later</option>
+            </select>
+          </label>
+          <label className="editor-field">
+            <span>Endpoint</span>
+            <input value={draft.endpoint} onChange={(event) => setDraft((current) => ({ ...current, endpoint: event.target.value }))} />
+          </label>
+          <label className="editor-field">
+            <span>Model</span>
+            <input value={draft.model} onChange={(event) => setDraft((current) => ({ ...current, model: event.target.value }))} />
+          </label>
+          <div className="settings-actions">
+            <button className="secondary-button compact-button" onClick={onDetect}>
+              Detect Local Providers
+            </button>
+            <button className="primary-button compact-button" onClick={() => onSave(draft)}>
+              Save Settings
+            </button>
+          </div>
+          {status ? <div className="ai-status-line">{status}</div> : null}
+          {detections.length > 0 ? (
+            <div className="provider-detection-list">
+              {detections.map((detection) => (
+                <button
+                  className={`provider-detection ${detection.available ? "available" : ""}`}
+                  key={`${detection.mode}-${detection.endpoint}`}
+                  onClick={() =>
+                    detection.available
+                      ? setDraft(
+                          normalizeAiSettings({
+                            mode: detection.mode,
+                            endpoint: detection.endpoint,
+                            model: detection.models[0] ?? ""
+                          })
+                        )
+                      : undefined
+                  }
+                >
+                  <strong>{detection.label}</strong>
+                  <small>{detection.available ? `${detection.models.length || 1} model${detection.models.length === 1 ? "" : "s"}` : detection.error}</small>
+                  <code>{detection.endpoint}</code>
+                </button>
+              ))}
+            </div>
+          ) : null}
+        </div>
+      </section>
+    </div>
   );
 }
 
@@ -1013,6 +1257,86 @@ function ConfidenceBar({ label, value, total }: { label: string; value: number; 
   );
 }
 
+function AiSchemaReviewPanel({
+  command,
+  settings,
+  status,
+  suggestions,
+  onApply,
+  onDismiss,
+  onRequest
+}: {
+  command: CommandSpec;
+  settings: AiSettings;
+  status: string;
+  suggestions: AiSchemaSuggestion[];
+  onApply: (suggestion: AiSchemaSuggestion) => void;
+  onDismiss: (suggestion: AiSchemaSuggestion) => void;
+  onRequest: () => void;
+}) {
+  return (
+    <section className="ai-review-panel">
+      <div className="ai-review-header">
+        <span>
+          <strong>AI Schema Review</strong>
+          <small>{settings.mode === "none" ? "disabled" : `${settings.mode} · ${settings.model}`}</small>
+        </span>
+        <button className="mini-button" onClick={onRequest} disabled={settings.mode === "none"}>
+          Suggest
+        </button>
+      </div>
+      {status ? <div className="ai-status-line">{status}</div> : null}
+      {suggestions.length > 0 ? (
+        <div className="ai-suggestion-list">
+          {suggestions.map((suggestion) => {
+            const field = command.fields.find((item) => item.id === suggestion.fieldId);
+            return (
+              <div className="ai-suggestion-item" key={`${suggestion.commandId}-${suggestion.fieldId}-${suggestion.reason}`}>
+                <div>
+                  <strong>{field?.label ?? suggestion.fieldId}</strong>
+                  <small>{suggestion.reason}</small>
+                </div>
+                <dl>
+                  {suggestion.label ? (
+                    <>
+                      <dt>Label</dt>
+                      <dd>
+                        {field?.label ?? ""} {"->"} {suggestion.label}
+                      </dd>
+                    </>
+                  ) : null}
+                  {suggestion.description ? (
+                    <>
+                      <dt>Description</dt>
+                      <dd>{suggestion.description}</dd>
+                    </>
+                  ) : null}
+                  {suggestion.group ? (
+                    <>
+                      <dt>Group</dt>
+                      <dd>
+                        {field?.ui?.group ?? "Options"} {"->"} {suggestion.group}
+                      </dd>
+                    </>
+                  ) : null}
+                </dl>
+                <div className="ai-suggestion-actions">
+                  <button className="mini-button" onClick={() => onDismiss(suggestion)}>
+                    Dismiss
+                  </button>
+                  <button className="primary-button compact-button" onClick={() => onApply(suggestion)}>
+                    Apply
+                  </button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      ) : null}
+    </section>
+  );
+}
+
 function FieldInspector({
   fields,
   manifest,
@@ -1305,16 +1629,24 @@ function OutputConsole({
   lines,
   runs,
   activeTab,
+  aiExplanation,
+  aiExplaining,
+  aiSettings,
   onTabChange,
   runState,
+  onExplainOutput,
   onRerun,
   onRunSelect
 }: {
   lines: ConsoleLine[];
   runs: StoredRun[];
   activeTab: ConsoleTab;
+  aiExplanation: AiCompletion | null;
+  aiExplaining: boolean;
+  aiSettings: AiSettings;
   onTabChange: (tab: ConsoleTab) => void;
   runState: RunState;
+  onExplainOutput: (stdout: string, stderr: string, analysis: OutputAnalysis) => void;
   onRerun: () => void;
   onRunSelect: (run: StoredRun) => void;
 }) {
@@ -1349,7 +1681,17 @@ function OutputConsole({
         </div>
       </div>
       <div className="console-output" data-testid="console-output">
-        {activeTab === "insights" ? <OutputInsights analysis={outputAnalysis} stdout={stdout} stderr={stderr} /> : null}
+        {activeTab === "insights" ? (
+          <OutputInsights
+            aiExplanation={aiExplanation}
+            aiExplaining={aiExplaining}
+            aiSettings={aiSettings}
+            analysis={outputAnalysis}
+            stdout={stdout}
+            stderr={stderr}
+            onExplain={() => onExplainOutput(stdout, stderr, outputAnalysis)}
+          />
+        ) : null}
         {activeTab === "all" && runs.length > 0 ? (
           <div className="run-history-list">
             {runs.slice(0, 5).map((run) => (
@@ -1384,7 +1726,23 @@ function OutputConsole({
   );
 }
 
-function OutputInsights({ analysis, stdout, stderr }: { analysis: OutputAnalysis; stdout: string; stderr: string }) {
+function OutputInsights({
+  aiExplanation,
+  aiExplaining,
+  aiSettings,
+  analysis,
+  stdout,
+  stderr,
+  onExplain
+}: {
+  aiExplanation: AiCompletion | null;
+  aiExplaining: boolean;
+  aiSettings: AiSettings;
+  analysis: OutputAnalysis;
+  stdout: string;
+  stderr: string;
+  onExplain: () => void;
+}) {
   const combinedOutput = [stdout, stderr].filter(Boolean).join("\n");
 
   return (
@@ -1401,8 +1759,23 @@ function OutputInsights({ analysis, stdout, stderr }: { analysis: OutputAnalysis
           <button className="mini-button dark" onClick={() => downloadText("givemeui-output.txt", combinedOutput)} disabled={!combinedOutput}>
             Download
           </button>
+          <button className="mini-button dark" onClick={onExplain} disabled={!combinedOutput || aiExplaining}>
+            {aiExplaining ? "Explaining" : aiSettings.mode === "none" ? "AI Disabled" : "Explain Output"}
+          </button>
         </div>
       </div>
+
+      {aiExplanation ? (
+        <section className="insight-block ai-explanation">
+          <div className="insight-block-header">
+            <strong>AI Explanation</strong>
+            <small>
+              {aiExplanation.provider === "none" ? "disabled" : `${aiExplanation.provider} · ${aiExplanation.model}`}
+            </small>
+          </div>
+          <pre>{aiExplanation.text}</pre>
+        </section>
+      ) : null}
 
       {analysis.json ? (
         <section className="insight-block">

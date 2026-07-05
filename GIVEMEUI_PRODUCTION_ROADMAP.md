@@ -464,6 +464,8 @@ Make command results easier to understand using deterministic output handling.
 
 ## Phase 6: Local AI Enhancement Layer
 
+Status: complete for the current local CLI alpha. See `docs/PHASE_6_LOCAL_AI.md`.
+
 ### Objectives
 
 Add optional AI while keeping the product functional without it.

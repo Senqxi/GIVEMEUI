@@ -249,6 +249,105 @@ button:not(:disabled):hover {
   font-weight: 700;
 }
 
+.settings-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  display: grid;
+  place-items: center;
+  background: rgba(16, 24, 32, 0.42);
+}
+
+.settings-panel {
+  width: min(560px, calc(100vw - 48px));
+  max-height: calc(100vh - 80px);
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #ffffff;
+  box-shadow: var(--shadow);
+}
+
+.settings-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 62px;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--line);
+}
+
+.settings-header span {
+  display: grid;
+  gap: 2px;
+}
+
+.settings-header strong {
+  font-size: 14px;
+}
+
+.settings-header small {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.settings-body {
+  display: grid;
+  gap: 12px;
+  max-height: calc(100vh - 150px);
+  overflow: auto;
+  padding: 16px;
+}
+
+.settings-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.provider-detection-list {
+  display: grid;
+  gap: 8px;
+}
+
+.provider-detection {
+  display: grid;
+  gap: 3px;
+  min-height: 62px;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fbfcfd;
+  color: var(--muted-strong);
+  text-align: left;
+  cursor: pointer;
+}
+
+.provider-detection.available {
+  border-color: #cfe2dd;
+  background: #f0fbf6;
+}
+
+.provider-detection strong {
+  color: var(--text);
+  font-size: 13px;
+}
+
+.provider-detection small {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.provider-detection code {
+  overflow: hidden;
+  color: var(--muted-strong);
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .workspace {
   display: grid;
   grid-template-rows: auto minmax(480px, 1fr) 250px;
@@ -680,6 +779,84 @@ button:not(:disabled):hover {
   gap: 12px;
   padding: 16px 18px;
   border-bottom: 1px solid var(--line);
+}
+
+.ai-review-panel {
+  display: grid;
+  gap: 8px;
+  padding: 12px 18px;
+  border-bottom: 1px solid var(--line);
+  background: #fbfcfd;
+}
+
+.ai-review-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.ai-review-header span {
+  display: grid;
+  gap: 2px;
+}
+
+.ai-review-header strong {
+  font-size: 13px;
+}
+
+.ai-review-header small,
+.ai-status-line {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.ai-suggestion-list {
+  display: grid;
+  gap: 8px;
+}
+
+.ai-suggestion-item {
+  display: grid;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid #cfe2dd;
+  border-radius: 8px;
+  background: #f0fbf6;
+}
+
+.ai-suggestion-item strong {
+  font-size: 12px;
+}
+
+.ai-suggestion-item small {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.ai-suggestion-item dl {
+  display: grid;
+  grid-template-columns: 72px 1fr;
+  gap: 4px 8px;
+  margin: 0;
+  color: var(--muted-strong);
+  font-size: 11px;
+}
+
+.ai-suggestion-item dt {
+  color: var(--muted);
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.ai-suggestion-item dd {
+  margin: 0;
+}
+
+.ai-suggestion-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
 }
 
 .discovery-metadata {
@@ -1375,6 +1552,16 @@ button:not(:disabled):hover {
 .insight-block small {
   color: #9fb0bf;
   font-size: 11px;
+}
+
+.ai-explanation pre {
+  margin: 0;
+  overflow-wrap: anywhere;
+  color: #dce7ef;
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  font-size: 12px;
+  line-height: 1.55;
+  white-space: pre-wrap;
 }
 
 .diagnostic-list,

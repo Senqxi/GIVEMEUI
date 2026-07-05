@@ -15,11 +15,12 @@ This alpha slice focuses on deterministic behavior:
 - Run the command locally without shell interpolation.
 - Stream stdout/stderr into the UI.
 - Show deterministic output insights for JSON, tables, diagnostics, progress, and file artifacts.
+- Optionally connect to local AI providers for reviewable schema suggestions and output explanations.
 - Edit generated field labels, descriptions, types, groups, required state, choices, and UI hints.
 - Persist tool schemas, trusted executables, presets, and run history locally.
 - Import/export command schemas as JSON.
 
-Cloud AI is not required. AI provider support will be added later as an optional enhancement layer.
+Cloud AI is not required. Local AI provider support is optional and disabled by default.
 
 ## Target Systems
 
@@ -116,6 +117,7 @@ npm run pack:check
 - Phase 2 schema review: [docs/PHASE_2_SCHEMA_REVIEW.md](./docs/PHASE_2_SCHEMA_REVIEW.md)
 - Phase 4 safe runner: [docs/PHASE_4_SAFE_RUNNER.md](./docs/PHASE_4_SAFE_RUNNER.md)
 - Phase 5 output understanding: [docs/PHASE_5_OUTPUT_UNDERSTANDING.md](./docs/PHASE_5_OUTPUT_UNDERSTANDING.md)
+- Phase 6 local AI: [docs/PHASE_6_LOCAL_AI.md](./docs/PHASE_6_LOCAL_AI.md)
 - V1 workflows: [docs/V1_WORKFLOWS.md](./docs/V1_WORKFLOWS.md)
 - Threat model: [docs/THREAT_MODEL.md](./docs/THREAT_MODEL.md)
 - Release process: [docs/RELEASE.md](./docs/RELEASE.md)

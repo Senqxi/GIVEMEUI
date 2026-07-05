@@ -1,4 +1,6 @@
 import type { DiscoveryRequest, DiscoveryResponse, RunEvent, RunRequest } from "./schema";
+import type { AiCompletion, AiProviderDetection, AiRunSummaryRequest, AiSchemaPatchResponse, AiSettings } from "./ai";
+import type { ToolManifest } from "./schema";
 
 export async function discoverTool(request: DiscoveryRequest): Promise<DiscoveryResponse> {
   const response = await fetch("/api/discover", {
@@ -52,3 +54,38 @@ export async function runCommandStream(
   }
 }
 
+export async function detectAiProviders(): Promise<AiProviderDetection[]> {
+  const response = await fetch("/api/ai/detect");
+  if (!response.ok) {
+    throw new Error(await response.text());
+  }
+  return response.json() as Promise<AiProviderDetection[]>;
+}
+
+export async function summarizeRunOutput(request: AiRunSummaryRequest): Promise<AiCompletion> {
+  const response = await fetch("/api/ai/summarize-run", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(request)
+  });
+
+  if (!response.ok) {
+    throw new Error(await response.text());
+  }
+
+  return response.json() as Promise<AiCompletion>;
+}
+
+export async function suggestSchemaPatch(settings: AiSettings, manifest: ToolManifest): Promise<AiSchemaPatchResponse> {
+  const response = await fetch("/api/ai/suggest-schema", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ settings, manifest })
+  });
+
+  if (!response.ok) {
+    throw new Error(await response.text());
+  }
+
+  return response.json() as Promise<AiSchemaPatchResponse>;
+}

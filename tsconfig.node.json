@@ -13,5 +13,5 @@
     "noEmit": true,
     "types": []
   },
-  "include": ["server", "src/lib/schema.ts", "src/lib/commandLine.ts", "src/lib/helpParser.ts"]
+  "include": ["server", "src/lib/ai.ts", "src/lib/commandLine.ts", "src/lib/helpParser.ts", "src/lib/outputAnalysis.ts", "src/lib/schema.ts"]
 }

@@ -10,6 +10,27 @@ declare const console: {
 declare function setTimeout(callback: () => void, delay: number): unknown;
 declare function clearTimeout(timeoutId: unknown): void;
 
+declare const AbortSignal: {
+  timeout(milliseconds: number): AbortSignal;
+};
+
+type AbortSignal = unknown;
+
+declare function fetch(
+  input: string,
+  init?: {
+    method?: string;
+    headers?: Record<string, string>;
+    body?: string;
+    signal?: AbortSignal;
+  }
+): Promise<{
+  ok: boolean;
+  status: number;
+  json(): Promise<unknown>;
+  text(): Promise<string>;
+}>;
+
 declare module "node:http" {
   export type IncomingMessage = {
     method?: string;

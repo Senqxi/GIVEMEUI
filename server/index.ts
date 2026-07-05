@@ -4,7 +4,10 @@ import { readFileSync, statSync } from "node:fs";
 import { formatCommand } from "../src/lib/commandLine";
 import { discoverCommand } from "./discovery";
 import { runCommand } from "./runner";
+import { detectLocalAiProviders, suggestSchemaPatch, summarizeRunOutput } from "./ai";
+import type { AiRunSummaryRequest, AiSettings } from "../src/lib/ai";
 import type { DiscoveryRequest, RunRequest } from "../src/lib/schema";
+import type { ToolManifest } from "../src/lib/schema";
 
 const STATIC_DIR = process.env.GIVEMEUI_STATIC_DIR;
 const HOST = process.env.GIVEMEUI_HOST ?? "127.0.0.1";
@@ -27,6 +30,26 @@ const server = createServer(async (req, res) => {
     if (req.method === "POST" && req.url === "/api/run") {
       const body = await readJson<RunRequest>(req);
       await runCommand(body, req, res);
+      return;
+    }
+
+    if (req.method === "GET" && req.url === "/api/ai/detect") {
+      const result = await detectLocalAiProviders();
+      sendJson(res, result);
+      return;
+    }
+
+    if (req.method === "POST" && req.url === "/api/ai/summarize-run") {
+      const body = await readJson<AiRunSummaryRequest>(req);
+      const result = await summarizeRunOutput(body);
+      sendJson(res, result);
+      return;
+    }
+
+    if (req.method === "POST" && req.url === "/api/ai/suggest-schema") {
+      const body = await readJson<{ settings: AiSettings; manifest: ToolManifest }>(req);
+      const result = await suggestSchemaPatch(body.settings, body.manifest);
+      sendJson(res, result);
       return;
     }
 

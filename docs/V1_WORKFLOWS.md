@@ -50,12 +50,14 @@ Exit criteria:
 3. Generated UI updates immediately.
 4. User can export the corrected schema as JSON.
 5. User can re-import that schema later.
+6. If local AI is enabled, user can request schema suggestions and apply or dismiss each suggestion.
 
 Exit criteria:
 
 - No file editing is required for ordinary schema correction.
 - Low-confidence and sensitive fields are easy to inspect.
 - Invalid imports are rejected with actionable errors.
+- AI suggestions are optional and reviewable.
 
 ## Workflow 3: Compose And Run A Command
 
@@ -77,6 +79,7 @@ Exit criteria:
 - Secret values are redacted from reusable persistence.
 - Environment values are not stored in run history.
 - JSON, table-like output, artifacts, and errors are easier to inspect without AI.
+- If local AI is enabled, output can be explained from captured stdout/stderr without executing follow-up commands.
 
 ## Workflow 4: Save A Repeatable Preset
 

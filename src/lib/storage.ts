@@ -1,4 +1,5 @@
 import type { FieldValues } from "./commandBuilder";
+import { DEFAULT_AI_SETTINGS, normalizeAiSettings, type AiSettings } from "./ai";
 import type { OutputAnalysis } from "./outputAnalysis";
 import type { CommandSpec, FieldKind, FieldSpec, ToolManifest, ToolSource } from "./schema";
 import { normalizeToolManifest } from "./schemaValidation";
@@ -54,6 +55,7 @@ export type WorkspaceState = {
   presets: SavedPreset[];
   runs: StoredRun[];
   trustedExecutables: TrustedExecutable[];
+  aiSettings: AiSettings;
 };
 
 export function loadWorkspace(fallbackManifest: ToolManifest): WorkspaceState {
@@ -71,7 +73,8 @@ export function loadWorkspace(fallbackManifest: ToolManifest): WorkspaceState {
       activeToolId: typeof parsed.activeToolId === "string" ? parsed.activeToolId : fallbackManifest.id,
       presets: Array.isArray(parsed.presets) ? parsed.presets.filter(isSavedPreset).slice(0, MAX_PRESETS) : [],
       runs: Array.isArray(parsed.runs) ? parsed.runs.filter(isStoredRun).slice(0, MAX_RUNS) : [],
-      trustedExecutables: Array.isArray(parsed.trustedExecutables) ? parsed.trustedExecutables.filter(isTrustedExecutable) : []
+      trustedExecutables: Array.isArray(parsed.trustedExecutables) ? parsed.trustedExecutables.filter(isTrustedExecutable) : [],
+      aiSettings: normalizeAiSettings(parsed.aiSettings)
     };
 
     if (!state.manifests.some((manifest) => manifest.id === state.activeToolId)) {
@@ -101,7 +104,8 @@ export function createWorkspace(fallbackManifest: ToolManifest): WorkspaceState 
     activeToolId: fallbackManifest.id,
     presets: [],
     runs: [],
-    trustedExecutables: []
+    trustedExecutables: [],
+    aiSettings: DEFAULT_AI_SETTINGS
   };
 }
 

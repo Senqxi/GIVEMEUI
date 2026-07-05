@@ -21,6 +21,7 @@ This project follows the spirit of semantic versioning while it is pre-1.0: mino
 - Phase 2 schema review workflow with schema versioning, validation, field table filtering, draft Save/Discard controls, and richer field editing.
 - Phase 4 safe command runner with executable trust, working directory controls, environment overrides, bounded timeouts, cancellation, and richer run history.
 - Phase 5 deterministic output understanding with JSON, NDJSON, CSV/TSV, diagnostics, progress, artifact detection, and output copy/download controls.
+- Phase 6 optional local AI layer with provider settings, Ollama/LM Studio/OpenAI-compatible detection, output explanations, and reviewable schema suggestions.
 
 ### Security
 
@@ -31,6 +32,7 @@ This project follows the spirit of semantic versioning while it is pre-1.0: mino
 - Imported schemas are validated and normalized before entering the local workspace.
 - Newly discovered or imported executables must be explicitly trusted before local execution.
 - Run history stores environment key names only, not environment values.
+- AI suggestions never execute commands and must be reviewed before changing schemas.
 
 ## [0.1.0] - TBD
 

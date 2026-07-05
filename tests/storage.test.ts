@@ -20,6 +20,12 @@ describe("workspace storage helpers", () => {
     expect(next.manifests.find((manifest) => manifest.id === "imported-tool")?.schemaVersion).toBe(1);
   });
 
+  it("defaults to deterministic AI-off mode", () => {
+    const workspace = createWorkspace(sampleManifest);
+
+    expect(workspace.aiSettings).toEqual({ mode: "none", endpoint: "", model: "" });
+  });
+
   it("trims run history to the local retention limit", () => {
     let workspace = createWorkspace(sampleManifest);
 
