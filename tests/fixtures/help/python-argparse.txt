@@ -1,0 +1,10 @@
+usage: backup.py [-h] --source SOURCE --dest DEST [--compress {none,gzip,zstd}] [--threads THREADS] [--dry-run]
+
+options:
+  -h, --help                         show this help message and exit
+  --source SOURCE                    input source directory
+  --dest DEST                        destination backup file
+  --compress {none,gzip,zstd}        compression mode
+  --threads THREADS                  worker thread count
+  --dry-run                          print commands without writing files
+  --exclude PATTERN                  exclude paths matching pattern

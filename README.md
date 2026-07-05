@@ -108,6 +108,9 @@ npm run pack:check
 - Security: [SECURITY.md](./SECURITY.md)
 - Changelog: [CHANGELOG.md](./CHANGELOG.md)
 - Product direction: [docs/PRODUCT.md](./docs/PRODUCT.md)
+- Phase 0 groundwork: [docs/PHASE_0_GROUNDWORK.md](./docs/PHASE_0_GROUNDWORK.md)
+- V1 workflows: [docs/V1_WORKFLOWS.md](./docs/V1_WORKFLOWS.md)
+- Threat model: [docs/THREAT_MODEL.md](./docs/THREAT_MODEL.md)
 - Release process: [docs/RELEASE.md](./docs/RELEASE.md)
 
 ## License

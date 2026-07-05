@@ -1,0 +1,11 @@
+Usage: docker [OPTIONS] COMMAND
+
+Options:
+  --config string           Location of client config files
+  -c, --context string      Name of the context to use to connect to the daemon
+  -D, --debug               Enable debug mode
+  -H, --host list           Daemon socket to connect to
+  -l, --log-level string    Set the logging level
+  --tls                     Use TLS; implied by --tlsverify
+  --tlscacert file          Trust certs signed only by this CA
+  --tlsverify               Use TLS and verify the remote

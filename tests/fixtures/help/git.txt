@@ -1,0 +1,11 @@
+usage: git [--version] [--help] [-C <path>] [-c <name>=<value>] [--exec-path <path>]
+
+Options:
+  --version                 print the Git suite version
+  --help                    print this message
+  -C path                   run as if git was started in path
+  -c name=value             pass a configuration parameter
+  --exec-path path          path to core Git programs
+  --work-tree path          set the path to the working tree
+  --git-dir path            set the path to the repository
+  --no-pager                do not pipe Git output into a pager

@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
+import { readFileSync } from "node:fs";
 import { buildArgs } from "../src/lib/commandBuilder";
 import { formatCommand } from "../src/lib/commandLine";
-import { commandLineForHelp, parseFields } from "../src/lib/helpParser";
+import { commandLineForHelp, parseFields, parseHelpOutput } from "../src/lib/helpParser";
 import type { CommandSpec } from "../src/lib/schema";
 
 describe("commandLineForHelp", () => {
@@ -65,6 +66,63 @@ Options:
   });
 });
 
+describe("representative help fixtures", () => {
+  it.each([
+    ["ffmpeg", "ffmpeg.txt", "ffmpeg --help", 9],
+    ["yt-dlp", "yt-dlp.txt", "yt-dlp --help", 8],
+    ["git", "git.txt", "git --help", 8],
+    ["docker", "docker.txt", "docker --help", 8],
+    ["backup.py", "python-argparse.txt", "backup.py --help", 7],
+    ["audit-tool", "authorized-security-tool.txt", "audit-tool --help", 8]
+  ])("creates a first-pass schema for %s", (name, fixture, commandLine, minimumFieldCount) => {
+    const manifest = parseHelpOutput(readFixture(fixture), commandLine);
+
+    expect(manifest.name).toBe(name);
+    expect(manifest.commands).toHaveLength(1);
+    expect(manifest.rawHelp?.toLowerCase()).toContain("usage");
+    expect(manifest.commands[0].fields.length).toBeGreaterThanOrEqual(minimumFieldCount);
+  });
+
+  it("captures media-tool flags as runnable fields", () => {
+    const manifest = parseHelpOutput(readFixture("ffmpeg.txt"), "ffmpeg --help");
+    const fields = manifest.commands[0].fields;
+
+    expect(fields).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ shortFlag: "-i", kind: "file" }),
+        expect.objectContaining({ shortFlag: "-y", kind: "boolean" }),
+        expect.objectContaining({ shortFlag: "-threads", kind: "number" })
+      ])
+    );
+  });
+
+  it("captures argparse choices and boolean fields", () => {
+    const manifest = parseHelpOutput(readFixture("python-argparse.txt"), "backup.py --help");
+    const fields = manifest.commands[0].fields;
+
+    expect(fields).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ flag: "--compress", kind: "enum", choices: ["none", "gzip", "zstd"] }),
+        expect.objectContaining({ flag: "--threads", kind: "number" }),
+        expect.objectContaining({ flag: "--dry-run", kind: "boolean" })
+      ])
+    );
+  });
+
+  it("classifies credential fields as secrets in authorized security-tool style help", () => {
+    const manifest = parseHelpOutput(readFixture("authorized-security-tool.txt"), "audit-tool --help");
+    const fields = manifest.commands[0].fields;
+
+    expect(fields).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ flag: "--password", kind: "secret" }),
+        expect.objectContaining({ flag: "--port", kind: "number" }),
+        expect.objectContaining({ flag: "--dry-run", kind: "boolean" })
+      ])
+    );
+  });
+});
+
 describe("buildArgs", () => {
   it("builds argument arrays without shell strings", () => {
     const command: CommandSpec = {
@@ -89,3 +147,7 @@ describe("formatCommand", () => {
     expect(formatCommand(["python3", "-c", "print('hello')"])).toBe(`python3 -c "print('hello')"`);
   });
 });
+
+function readFixture(name: string): string {
+  return readFileSync(new URL(`./fixtures/help/${name}`, import.meta.url), "utf8");
+}

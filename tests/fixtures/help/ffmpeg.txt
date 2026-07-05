@@ -1,0 +1,14 @@
+usage: ffmpeg [options] [[infile options] -i infile]... {[outfile options] outfile}...
+
+Main options:
+  -h, --help                  show help
+  -version                    show version
+  -y                          overwrite output files
+  -n                          never overwrite output files
+  -i input_file               input file name
+  -f fmt                      force format
+  -codec codec                codec name
+  -t duration                 record or transcode duration
+  -ss position                seek to position
+  -vf filter_graph            set video filters
+  -threads count              thread count

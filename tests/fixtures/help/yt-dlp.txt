@@ -1,0 +1,12 @@
+Usage: yt-dlp [OPTIONS] URL [URL...]
+
+General Options:
+  -h, --help                         Print this help text and exit
+  --version                          Print program version and exit
+  -U, --update                       Update this program to latest version
+  -o TEMPLATE, --output TEMPLATE     Output filename template
+  -f FORMAT, --format FORMAT         Video format code
+  --cookies FILE                     Netscape cookies file
+  --proxy URL                        Use the specified HTTP/HTTPS/SOCKS proxy
+  --download-archive FILE            Download only videos not listed in archive
+  --no-playlist                      Download only the video if the URL refers to a playlist

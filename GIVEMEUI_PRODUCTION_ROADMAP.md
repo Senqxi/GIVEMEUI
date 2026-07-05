@@ -231,6 +231,12 @@ type FieldSpec = {
 - Fixture schemas exist.
 - There is a written threat model.
 
+### Phase 0 Status
+
+Phase 0 is complete for the open-source baseline. The implemented artifacts are tracked in [docs/PHASE_0_GROUNDWORK.md](./docs/PHASE_0_GROUNDWORK.md), with V1 workflows in [docs/V1_WORKFLOWS.md](./docs/V1_WORKFLOWS.md), the production threat model in [docs/THREAT_MODEL.md](./docs/THREAT_MODEL.md), and parser fixtures in `tests/fixtures/help/`.
+
+The next production step is Phase 1: deterministic CLI discovery.
+
 ## Phase 1: Deterministic CLI Discovery
 
 ### Objectives

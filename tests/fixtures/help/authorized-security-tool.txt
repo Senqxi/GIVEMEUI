@@ -1,0 +1,11 @@
+Usage: audit-tool [OPTIONS]
+
+Options:
+  -h, --help                         show help
+  -u USER, --user USER               authorized username to test
+  -L FILE, --user-list FILE          read authorized usernames from file
+  -p SECRET, --password SECRET       authorized password or token
+  -s PORT, --port PORT               target service port
+  --rate NUMBER                      maximum attempts per minute
+  --dry-run                          print command without running
+  --notes FILE                       operator notes file
