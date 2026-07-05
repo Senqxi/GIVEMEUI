@@ -23,7 +23,7 @@ Cloud AI is not required. AI provider support will be added later as an optional
 Until a package is published, install the CLI from a local checkout:
 
 ```bash
-git clone <your-github-repo-url> GIVEMEUI
+git clone https://github.com/Senqxi/GIVEMEUI.git
 cd GIVEMEUI
 npm install
 npm run build

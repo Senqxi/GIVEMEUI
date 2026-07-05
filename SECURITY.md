@@ -10,7 +10,7 @@ The project is pre-1.0. Security fixes are handled on the `main` branch until st
 
 Do not open a public issue for vulnerabilities.
 
-Until a dedicated security contact is published, report privately through the repository owner's GitHub profile or by opening a minimal private advisory if you have maintainer access.
+Until a dedicated security contact is published, report privately through the repository owner's GitHub profile or by opening a private advisory if you have maintainer access.
 
 Include:
 

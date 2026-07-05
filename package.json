@@ -4,6 +4,14 @@
   "description": "Local-first CLI-to-UI generator for terminal tools.",
   "license": "MIT",
   "type": "module",
+  "homepage": "https://github.com/Senqxi/GIVEMEUI#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Senqxi/GIVEMEUI.git"
+  },
+  "bugs": {
+    "url": "https://github.com/Senqxi/GIVEMEUI/issues"
+  },
   "bin": {
     "givemeui": "./bin/givemeui.mjs"
   },
