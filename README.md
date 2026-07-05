@@ -14,6 +14,7 @@ This alpha slice focuses on deterministic behavior:
 - Preview the exact command arguments.
 - Run the command locally without shell interpolation.
 - Stream stdout/stderr into the UI.
+- Show deterministic output insights for JSON, tables, diagnostics, progress, and file artifacts.
 - Edit generated field labels, descriptions, types, groups, required state, choices, and UI hints.
 - Persist tool schemas, trusted executables, presets, and run history locally.
 - Import/export command schemas as JSON.
@@ -114,6 +115,7 @@ npm run pack:check
 - Phase 1 discovery: [docs/PHASE_1_DISCOVERY.md](./docs/PHASE_1_DISCOVERY.md)
 - Phase 2 schema review: [docs/PHASE_2_SCHEMA_REVIEW.md](./docs/PHASE_2_SCHEMA_REVIEW.md)
 - Phase 4 safe runner: [docs/PHASE_4_SAFE_RUNNER.md](./docs/PHASE_4_SAFE_RUNNER.md)
+- Phase 5 output understanding: [docs/PHASE_5_OUTPUT_UNDERSTANDING.md](./docs/PHASE_5_OUTPUT_UNDERSTANDING.md)
 - V1 workflows: [docs/V1_WORKFLOWS.md](./docs/V1_WORKFLOWS.md)
 - Threat model: [docs/THREAT_MODEL.md](./docs/THREAT_MODEL.md)
 - Release process: [docs/RELEASE.md](./docs/RELEASE.md)

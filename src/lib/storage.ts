@@ -1,4 +1,5 @@
 import type { FieldValues } from "./commandBuilder";
+import type { OutputAnalysis } from "./outputAnalysis";
 import type { CommandSpec, FieldKind, FieldSpec, ToolManifest, ToolSource } from "./schema";
 import { normalizeToolManifest } from "./schemaValidation";
 
@@ -32,6 +33,7 @@ export type StoredRun = {
   timedOut?: boolean;
   cwd?: string;
   envKeys?: string[];
+  outputAnalysis?: OutputAnalysis;
   stdout: string;
   stderr: string;
   startedAt: string;

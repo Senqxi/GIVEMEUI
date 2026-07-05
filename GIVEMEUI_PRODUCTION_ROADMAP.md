@@ -428,6 +428,8 @@ Run commands safely, stream output, and record results.
 
 ## Phase 5: Output Understanding Without AI
 
+Status: complete for the current local CLI alpha. See `docs/PHASE_5_OUTPUT_UNDERSTANDING.md`.
+
 ### Objectives
 
 Make command results easier to understand using deterministic output handling.

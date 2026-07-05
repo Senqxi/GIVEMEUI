@@ -67,7 +67,8 @@ Exit criteria:
 6. User clicks Run.
 7. GIVEMEUI executes the local process without shell interpolation.
 8. GIVEMEUI streams stdout and stderr separately.
-9. User sees exit code, signal, timeout state, duration, and run history.
+9. GIVEMEUI detects obvious JSON, tables, diagnostics, progress, and artifact paths.
+10. User sees exit code, signal, timeout state, duration, structured output, and run history.
 
 Exit criteria:
 
@@ -75,6 +76,7 @@ Exit criteria:
 - Runs can be canceled.
 - Secret values are redacted from reusable persistence.
 - Environment values are not stored in run history.
+- JSON, table-like output, artifacts, and errors are easier to inspect without AI.
 
 ## Workflow 4: Save A Repeatable Preset
 

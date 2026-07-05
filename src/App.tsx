@@ -19,6 +19,7 @@ import {
 import { discoverTool, runCommandStream } from "./lib/api";
 import { buildCommandPreview, buildRunRequest, initialValuesFor, type FieldValues } from "./lib/commandBuilder";
 import { formatCommand } from "./lib/commandLine";
+import { analyzeRunOutput, type OutputAnalysis, type OutputArtifact } from "./lib/outputAnalysis";
 import { parseEnvText, timeoutMsFromSeconds } from "./lib/runSettings";
 import { sampleManifest } from "./lib/sampleData";
 import {
@@ -44,6 +45,8 @@ type ConsoleLine = {
   text: string;
   at: string;
 };
+
+type ConsoleTab = "all" | "insights" | "stdout" | "stderr";
 
 type RunState = {
   running: boolean;
@@ -117,7 +120,7 @@ export function App() {
     command: []
   });
   const [isDiscovering, setIsDiscovering] = useState(false);
-  const [activeConsoleTab, setActiveConsoleTab] = useState<"all" | "stdout" | "stderr">("all");
+  const [activeConsoleTab, setActiveConsoleTab] = useState<ConsoleTab>("all");
   const [runSettings, setRunSettings] = useState<RunSettings>(DEFAULT_RUN_SETTINGS);
   const abortRef = useRef<AbortController | null>(null);
   const runCaptureRef = useRef<RunCapture | null>(null);
@@ -331,6 +334,7 @@ export function App() {
         timedOut: event.timedOut,
         cwd: capture.cwd,
         envKeys: capture.envKeys,
+        outputAnalysis: analyzeRunOutput(capture.stdout, capture.stderr),
         stdout: capture.stdout,
         stderr: capture.stderr,
         startedAt: capture.startedAt,
@@ -1308,21 +1312,24 @@ function OutputConsole({
 }: {
   lines: ConsoleLine[];
   runs: StoredRun[];
-  activeTab: "all" | "stdout" | "stderr";
-  onTabChange: (tab: "all" | "stdout" | "stderr") => void;
+  activeTab: ConsoleTab;
+  onTabChange: (tab: ConsoleTab) => void;
   runState: RunState;
   onRerun: () => void;
   onRunSelect: (run: StoredRun) => void;
 }) {
   const visibleLines = lines.filter((line) => activeTab === "all" || line.stream === activeTab || line.stream === "system");
+  const stdout = useMemo(() => lines.filter((line) => line.stream === "stdout").map((line) => line.text).join("\n"), [lines]);
+  const stderr = useMemo(() => lines.filter((line) => line.stream === "stderr").map((line) => line.text).join("\n"), [lines]);
+  const outputAnalysis = useMemo(() => analyzeRunOutput(stdout, stderr), [stdout, stderr]);
 
   return (
     <section className="console-panel">
       <div className="console-toolbar">
         <div className="console-tabs">
-          {(["all", "stdout", "stderr"] as const).map((tab) => (
+          {(["all", "insights", "stdout", "stderr"] as const).map((tab) => (
             <button className={activeTab === tab ? "selected" : ""} onClick={() => onTabChange(tab)} key={tab}>
-              {tab === "all" ? "Run History" : tab}
+              {tab === "all" ? "Run History" : tab === "insights" ? "Insights" : tab}
             </button>
           ))}
         </div>
@@ -1342,6 +1349,7 @@ function OutputConsole({
         </div>
       </div>
       <div className="console-output" data-testid="console-output">
+        {activeTab === "insights" ? <OutputInsights analysis={outputAnalysis} stdout={stdout} stderr={stderr} /> : null}
         {activeTab === "all" && runs.length > 0 ? (
           <div className="run-history-list">
             {runs.slice(0, 5).map((run) => (
@@ -1353,19 +1361,171 @@ function OutputConsole({
                   </small>
                 </span>
                 <code>{run.preview}</code>
+                {run.outputAnalysis ? (
+                  <span className="run-analysis-badges">
+                    {run.outputAnalysis.format !== "text" ? <b>{run.outputAnalysis.format}</b> : null}
+                    {run.outputAnalysis.summary.errorCount > 0 ? <b className="error">{run.outputAnalysis.summary.errorCount} errors</b> : null}
+                    {run.outputAnalysis.summary.artifactCount > 0 ? <b>{run.outputAnalysis.summary.artifactCount} files</b> : null}
+                  </span>
+                ) : null}
               </button>
             ))}
           </div>
         ) : null}
-        {visibleLines.map((line) => (
+        {activeTab !== "insights" ? visibleLines.map((line) => (
           <div className={`console-line ${line.stream}`} key={line.id}>
             <span>{new Date(line.at).toLocaleTimeString()}</span>
             <code>{line.stream}</code>
-            <pre>{line.text}</pre>
+            <pre className={diagnosticClassFor(line.text)}>{line.text}</pre>
           </div>
-        ))}
+        )) : null}
       </div>
     </section>
+  );
+}
+
+function OutputInsights({ analysis, stdout, stderr }: { analysis: OutputAnalysis; stdout: string; stderr: string }) {
+  const combinedOutput = [stdout, stderr].filter(Boolean).join("\n");
+
+  return (
+    <div className="output-insights" data-testid="output-insights">
+      <div className="insight-summary">
+        <InsightStat label="Format" value={analysis.format.toUpperCase()} />
+        <InsightStat label="Errors" value={String(analysis.summary.errorCount)} tone={analysis.summary.errorCount > 0 ? "error" : undefined} />
+        <InsightStat label="Warnings" value={String(analysis.summary.warningCount)} tone={analysis.summary.warningCount > 0 ? "warning" : undefined} />
+        <InsightStat label="Artifacts" value={String(analysis.summary.artifactCount)} />
+        <div className="insight-actions">
+          <button className="mini-button dark" onClick={() => void copyText(combinedOutput)} disabled={!combinedOutput}>
+            Copy Output
+          </button>
+          <button className="mini-button dark" onClick={() => downloadText("givemeui-output.txt", combinedOutput)} disabled={!combinedOutput}>
+            Download
+          </button>
+        </div>
+      </div>
+
+      {analysis.json ? (
+        <section className="insight-block">
+          <div className="insight-block-header">
+            <strong>{analysis.json.ndjson ? "NDJSON" : "JSON"}</strong>
+            <button className="mini-button dark" onClick={() => void copyText(analysis.json?.pretty ?? "")}>
+              Copy JSON
+            </button>
+          </div>
+          <pre className="json-viewer">{analysis.json.pretty}</pre>
+        </section>
+      ) : null}
+
+      {analysis.table ? (
+        <section className="insight-block">
+          <div className="insight-block-header">
+            <strong>{analysis.format.toUpperCase()} Table</strong>
+            <button className="mini-button dark" onClick={() => void copyText(tableToText(analysis.table?.headers ?? [], analysis.table?.rows ?? []))}>
+              Copy Table
+            </button>
+          </div>
+          <div className="table-viewer">
+            <table>
+              <thead>
+                <tr>
+                  {analysis.table.headers.map((header) => (
+                    <th key={header}>{header}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {analysis.table.rows.slice(0, 12).map((row, rowIndex) => (
+                  <tr key={`${row.join("-")}-${rowIndex}`}>
+                    {row.map((cell, cellIndex) => (
+                      <td key={`${cell}-${cellIndex}`}>{cell}</td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          {analysis.table.truncated ? <small>Showing first 100 parsed rows.</small> : null}
+        </section>
+      ) : null}
+
+      {analysis.diagnostics.length > 0 ? (
+        <section className="insight-block">
+          <div className="insight-block-header">
+            <strong>Diagnostics</strong>
+          </div>
+          <div className="diagnostic-list">
+            {analysis.diagnostics.slice(0, 12).map((diagnostic) => (
+              <div className={`diagnostic-item ${diagnostic.severity}`} key={`${diagnostic.stream}-${diagnostic.line}-${diagnostic.text}`}>
+                <code>
+                  {diagnostic.stream}:{diagnostic.line}
+                </code>
+                <pre>{diagnostic.text}</pre>
+              </div>
+            ))}
+          </div>
+        </section>
+      ) : null}
+
+      {analysis.artifacts.length > 0 ? (
+        <section className="insight-block">
+          <div className="insight-block-header">
+            <strong>Artifacts</strong>
+          </div>
+          <div className="artifact-list">
+            {analysis.artifacts.map((artifact) => (
+              <ArtifactRow artifact={artifact} key={`${artifact.path}-${artifact.line}`} />
+            ))}
+          </div>
+        </section>
+      ) : null}
+
+      {analysis.progress.length > 0 ? (
+        <section className="insight-block">
+          <div className="insight-block-header">
+            <strong>Progress</strong>
+          </div>
+          <div className="progress-list">
+            {analysis.progress.map((progress) => (
+              <div className="progress-item" key={`${progress.stream}-${progress.line}-${progress.text}`}>
+                {progress.percent !== undefined ? <span style={{ width: `${progress.percent}%` }} /> : null}
+                <pre>{progress.text}</pre>
+              </div>
+            ))}
+          </div>
+        </section>
+      ) : null}
+
+      {!combinedOutput ? (
+        <div className="empty-insights">
+          <Terminal size={22} />
+          <span>No command output captured.</span>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function InsightStat({ label, value, tone }: { label: string; value: string; tone?: "error" | "warning" }) {
+  return (
+    <div className={`insight-stat ${tone ?? ""}`}>
+      <span>{label}</span>
+      <strong>{value}</strong>
+    </div>
+  );
+}
+
+function ArtifactRow({ artifact }: { artifact: OutputArtifact }) {
+  return (
+    <div className="artifact-item">
+      <span className={`artifact-kind ${artifact.kind}`}>{artifact.kind}</span>
+      <code>{artifact.path}</code>
+      <button className="mini-button dark" onClick={() => void copyText(artifact.path)}>
+        Copy
+      </button>
+      <button className="mini-button dark" onClick={() => openArtifact(artifact)} disabled={!artifact.isAbsolute}>
+        Open
+      </button>
+    </div>
   );
 }
 
@@ -1409,4 +1569,35 @@ function consoleLinesForRun(run: StoredRun): ConsoleLine[] {
   }
 
   return [...summary, ...cwd, ...env, ...stdout, ...stderr];
+}
+
+function diagnosticClassFor(text: string): string | undefined {
+  if (/\b(error|fatal|exception|traceback|failed|failure|denied)\b/i.test(text)) return "highlight-error";
+  if (/\b(warn|warning|deprecated|caution)\b/i.test(text)) return "highlight-warning";
+  return undefined;
+}
+
+async function copyText(text: string): Promise<void> {
+  if (!text) return;
+  await navigator.clipboard?.writeText(text);
+}
+
+function downloadText(filename: string, text: string): void {
+  if (!text) return;
+  const blob = new Blob([text], { type: "text/plain;charset=utf-8" });
+  const href = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = href;
+  anchor.download = filename;
+  anchor.click();
+  URL.revokeObjectURL(href);
+}
+
+function openArtifact(artifact: OutputArtifact): void {
+  if (!artifact.isAbsolute) return;
+  window.open(`file://${encodeURI(artifact.path)}`, "_blank", "noopener,noreferrer");
+}
+
+function tableToText(headers: string[], rows: string[][]): string {
+  return [headers, ...rows].map((row) => row.join("\t")).join("\n");
 }

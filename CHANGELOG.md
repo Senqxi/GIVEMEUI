@@ -20,6 +20,7 @@ This project follows the spirit of semantic versioning while it is pre-1.0: mino
 - Phase 1 deterministic discovery with executable resolution, version capture, help fallbacks, positional parsing, subcommand drafts, and UI discovery metadata.
 - Phase 2 schema review workflow with schema versioning, validation, field table filtering, draft Save/Discard controls, and richer field editing.
 - Phase 4 safe command runner with executable trust, working directory controls, environment overrides, bounded timeouts, cancellation, and richer run history.
+- Phase 5 deterministic output understanding with JSON, NDJSON, CSV/TSV, diagnostics, progress, artifact detection, and output copy/download controls.
 
 ### Security
 
