@@ -27,11 +27,22 @@ export type StoredRun = {
   command: string[];
   preview: string;
   exitCode: number | null;
+  signal?: string | null;
   durationMs: number;
+  timedOut?: boolean;
+  cwd?: string;
+  envKeys?: string[];
   stdout: string;
   stderr: string;
   startedAt: string;
   completedAt: string;
+};
+
+export type TrustedExecutable = {
+  executable: string;
+  name?: string;
+  source: "user" | "imported";
+  trustedAt: string;
 };
 
 export type WorkspaceState = {
@@ -40,6 +51,7 @@ export type WorkspaceState = {
   activeToolId: string;
   presets: SavedPreset[];
   runs: StoredRun[];
+  trustedExecutables: TrustedExecutable[];
 };
 
 export function loadWorkspace(fallbackManifest: ToolManifest): WorkspaceState {
@@ -56,7 +68,8 @@ export function loadWorkspace(fallbackManifest: ToolManifest): WorkspaceState {
       manifests: manifests.length > 0 ? manifests : [fallbackManifest],
       activeToolId: typeof parsed.activeToolId === "string" ? parsed.activeToolId : fallbackManifest.id,
       presets: Array.isArray(parsed.presets) ? parsed.presets.filter(isSavedPreset).slice(0, MAX_PRESETS) : [],
-      runs: Array.isArray(parsed.runs) ? parsed.runs.filter(isStoredRun).slice(0, MAX_RUNS) : []
+      runs: Array.isArray(parsed.runs) ? parsed.runs.filter(isStoredRun).slice(0, MAX_RUNS) : [],
+      trustedExecutables: Array.isArray(parsed.trustedExecutables) ? parsed.trustedExecutables.filter(isTrustedExecutable) : []
     };
 
     if (!state.manifests.some((manifest) => manifest.id === state.activeToolId)) {
@@ -85,7 +98,8 @@ export function createWorkspace(fallbackManifest: ToolManifest): WorkspaceState 
     manifests: [normalizeToolManifest(fallbackManifest)],
     activeToolId: fallbackManifest.id,
     presets: [],
-    runs: []
+    runs: [],
+    trustedExecutables: []
   };
 }
 
@@ -115,6 +129,18 @@ export function appendPreset(state: WorkspaceState, preset: SavedPreset): Worksp
   return {
     ...state,
     presets: [preset, ...state.presets].slice(0, MAX_PRESETS)
+  };
+}
+
+export function isExecutableTrusted(state: WorkspaceState, executable: string): boolean {
+  return state.trustedExecutables.some((item) => item.executable === executable);
+}
+
+export function trustExecutable(state: WorkspaceState, executable: TrustedExecutable): WorkspaceState {
+  const existing = state.trustedExecutables.filter((item) => item.executable !== executable.executable);
+  return {
+    ...state,
+    trustedExecutables: [{ ...executable, executable: executable.executable.trim() }, ...existing]
   };
 }
 
@@ -206,6 +232,18 @@ function isStoredRun(value: unknown): value is StoredRun {
     typeof run.stderr === "string" &&
     typeof run.startedAt === "string" &&
     typeof run.completedAt === "string"
+  );
+}
+
+function isTrustedExecutable(value: unknown): value is TrustedExecutable {
+  if (!value || typeof value !== "object") return false;
+  const trusted = value as Partial<TrustedExecutable>;
+  return (
+    typeof trusted.executable === "string" &&
+    trusted.executable.trim().length > 0 &&
+    (trusted.name === undefined || typeof trusted.name === "string") &&
+    (trusted.source === "user" || trusted.source === "imported") &&
+    typeof trusted.trustedAt === "string"
   );
 }
 

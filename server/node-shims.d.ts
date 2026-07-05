@@ -63,6 +63,7 @@ declare module "node:fs" {
   export function rmSync(path: string, options?: { force?: boolean; recursive?: boolean }): void;
   export function statSync(path: string): {
     isFile(): boolean;
+    isDirectory(): boolean;
   };
 }
 

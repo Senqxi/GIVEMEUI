@@ -2,7 +2,7 @@
 
 This file is the canonical build prompt for GIVEMEUI.
 
-GIVEMEUI is a local-first command-line companion that converts terminal applications, shell commands, and CLI tools into usable graphical interfaces. It should work without AI through deterministic command introspection, and it may optionally use local or cloud AI providers to improve command understanding, output interpretation, and UI generation.
+GIVEMEUI is a locally installed command-line companion that converts terminal applications, shell commands, and CLI tools into usable graphical interfaces. It should work without AI through deterministic command introspection, and it may optionally use local or cloud AI providers to improve command understanding, output interpretation, and UI generation.
 
 The product should feel like an extension of the terminal, not a replacement for it. Its purpose is to help users run command-line tools faster by reducing flag memorization, making option selection structured, preserving exact command previews, and saving repeatable workflows.
 
@@ -12,7 +12,7 @@ The production product must not depend on cloud AI. AI is an enhancement layer, 
 
 ### Core Goal
 
-Build a production-grade desktop/web application that lets a user point GIVEMEUI at a CLI command and receive a generated UI for configuring, running, monitoring, and understanding that command. The UI should act like a practical control panel for the underlying CLI, similar in spirit to how Wireshark gives users a structured interface around packet-capture workflows.
+Build a production-grade locally installed CLI tool that lets a user point GIVEMEUI at a terminal command and receive a local desktop UI for configuring, running, monitoring, and understanding that command. The UI should act like a practical control panel for the underlying CLI, similar in spirit to how Wireshark gives users a structured interface around packet-capture workflows.
 
 The UI should turn this:
 
@@ -62,6 +62,7 @@ The user should never lose sight of the command being run. Advanced users should
 - Do not try to support every interactive TUI application perfectly.
 - Do not build a general app builder.
 - Do not require a hosted backend.
+- Do not target mobile operating systems for V1.
 - Do not require OpenAI or any cloud provider.
 - Do not execute untrusted remote commands without explicit user consent.
 - Do not hide the underlying command from advanced users.
@@ -81,7 +82,7 @@ Windows support can come later, but V1 should be excellent for local Linux/macOS
 
 ### App Shape
 
-Start with a local desktop-capable web app:
+Start with a local CLI package that serves a desktop local UI:
 
 - Frontend: React + Vite + TypeScript.
 - Desktop wrapper: Tauri preferred for production local execution, Electron acceptable if the repo already depends on it.
@@ -92,7 +93,7 @@ Start with a local desktop-capable web app:
 
 ### Why This Shape
 
-React + Vite gives fast UI development. Tauri gives native filesystem/process access with a smaller footprint than Electron. SQLite keeps the app local and portable. A schema-first model allows deterministic parsers, local AI, cloud AI, and manual editing to all write to the same intermediate representation.
+React + Vite gives fast local UI development. Tauri gives native filesystem/process access with a smaller footprint than Electron. SQLite keeps the app local and portable. A schema-first model allows deterministic parsers, local AI, cloud AI, and manual editing to all write to the same intermediate representation.
 
 ## Core Architecture
 
@@ -387,6 +388,8 @@ Render a functional UI from the command schema.
 - Users can save and reload presets.
 
 ## Phase 4: Safe Command Runner
+
+Status: complete for the current local CLI alpha. See `docs/PHASE_4_SAFE_RUNNER.md`.
 
 ### Objectives
 

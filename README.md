@@ -1,8 +1,8 @@
 # GIVEMEUI
 
-GIVEMEUI is a local-first command-line companion that converts terminal tools into generated graphical interfaces.
+GIVEMEUI is a locally installed command-line companion that converts terminal tools into generated graphical interfaces.
 
-It is intended to be an MIT-licensed open-source tool that users can install from GitHub or a package registry, run from their CLI, and use locally without a hosted backend. The goal is not to replace the terminal; it is to make command-line tools faster to configure, safer to preview, and easier to repeat.
+It is intended to be an MIT-licensed open-source tool that users can download from GitHub or a package registry, run from their CLI, and use locally without a hosted backend. The goal is not to replace the terminal; it is to make command-line tools faster to configure, safer to preview, and easier to repeat.
 
 Think of it like a Wireshark-style UI layer for terminal workflows: the underlying CLI stays in control, while GIVEMEUI helps users select flags, manage presets, run commands, and inspect output.
 
@@ -15,7 +15,7 @@ This alpha slice focuses on deterministic behavior:
 - Run the command locally without shell interpolation.
 - Stream stdout/stderr into the UI.
 - Edit generated field labels, descriptions, types, groups, required state, choices, and UI hints.
-- Persist tool schemas, presets, and run history locally in the browser.
+- Persist tool schemas, trusted executables, presets, and run history locally.
 - Import/export command schemas as JSON.
 
 Cloud AI is not required. AI provider support will be added later as an optional enhancement layer.
@@ -28,7 +28,9 @@ GIVEMEUI starts with Unix-like systems:
 - Kali Linux.
 - macOS.
 
-It should work with ordinary developer tools, media tools, scripts, automation tools, and authorized security tools that users already run locally. Sensitive tools still require clear command previews, local trust, and responsible use.
+It should work with ordinary developer tools, media tools, scripts, automation tools, and authorized security tools that users already run locally. Sensitive tools still require clear command previews, explicit executable trust, and responsible use.
+
+GIVEMEUI is not a mobile product. The production target is a local desktop command-line installation for Debian/Linux and macOS-style systems.
 
 ## Install From Source
 
@@ -43,7 +45,7 @@ npm link
 givemeui
 ```
 
-Open `http://127.0.0.1:5173` after the CLI starts. Use another port if needed:
+The CLI serves a local desktop UI at `http://127.0.0.1:5173` after it starts. Use another port if needed:
 
 ```bash
 givemeui --port 5180 --open
@@ -111,6 +113,7 @@ npm run pack:check
 - Phase 0 groundwork: [docs/PHASE_0_GROUNDWORK.md](./docs/PHASE_0_GROUNDWORK.md)
 - Phase 1 discovery: [docs/PHASE_1_DISCOVERY.md](./docs/PHASE_1_DISCOVERY.md)
 - Phase 2 schema review: [docs/PHASE_2_SCHEMA_REVIEW.md](./docs/PHASE_2_SCHEMA_REVIEW.md)
+- Phase 4 safe runner: [docs/PHASE_4_SAFE_RUNNER.md](./docs/PHASE_4_SAFE_RUNNER.md)
 - V1 workflows: [docs/V1_WORKFLOWS.md](./docs/V1_WORKFLOWS.md)
 - Threat model: [docs/THREAT_MODEL.md](./docs/THREAT_MODEL.md)
 - Release process: [docs/RELEASE.md](./docs/RELEASE.md)

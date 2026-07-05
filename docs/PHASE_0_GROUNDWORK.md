@@ -7,7 +7,7 @@ Phase 0 establishes what GIVEMEUI is allowed to become before the parser, runner
 - GIVEMEUI is a command-line companion for Linux/macOS-style terminal tools.
 - V1 targets Debian, Kali Linux, macOS, and Unix-like shell workflows.
 - Core functionality must work without cloud AI.
-- The app ships first as a local CLI package that serves a browser UI and local API.
+- The tool ships first as a local CLI package that serves a desktop local UI and local API.
 - Commands are represented as executable plus argument arrays.
 - Shell-string execution is not part of the default execution model.
 - Generated schemas are drafts that users can review and edit.

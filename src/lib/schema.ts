@@ -142,7 +142,7 @@ export type RunEvent =
   | { type: "start"; command: string[]; at: string }
   | { type: "stdout"; chunk: string; at: string }
   | { type: "stderr"; chunk: string; at: string }
-  | { type: "exit"; exitCode: number | null; signal: string | null; durationMs: number; at: string }
+  | { type: "exit"; exitCode: number | null; signal: string | null; durationMs: number; timedOut?: boolean; at: string }
   | { type: "error"; message: string; at: string };
 
 export function confidenceLevel(confidence: number): ConfidenceLevel {

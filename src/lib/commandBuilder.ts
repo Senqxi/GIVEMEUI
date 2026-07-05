@@ -2,6 +2,7 @@ import { formatCommand } from "./commandLine";
 import type { CommandSpec, FieldSpec, RunRequest, ToolManifest } from "./schema";
 
 export type FieldValues = Record<string, string | number | boolean | string[] | undefined>;
+export type RunOptions = Pick<RunRequest, "cwd" | "env" | "timeoutMs">;
 
 export function buildArgs(command: CommandSpec, values: FieldValues): string[] {
   const positional: Array<{ position: number; value: string }> = [];
@@ -40,12 +41,14 @@ export function buildArgs(command: CommandSpec, values: FieldValues): string[] {
   ];
 }
 
-export function buildRunRequest(manifest: ToolManifest, command: CommandSpec, values: FieldValues): RunRequest {
+export function buildRunRequest(manifest: ToolManifest, command: CommandSpec, values: FieldValues, options: RunOptions = {}): RunRequest {
   return {
     executable: manifest.executable,
     baseArgs: [...manifest.baseArgs, ...(command.subcommand ?? [])],
     args: buildArgs(command, values),
-    timeoutMs: 120000,
+    cwd: options.cwd,
+    env: options.env,
+    timeoutMs: options.timeoutMs ?? 120000,
     redactedFieldIds: command.fields.filter((field) => field.kind === "secret").map((field) => field.id)
   };
 }

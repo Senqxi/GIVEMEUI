@@ -1,11 +1,10 @@
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
-import { spawn } from "node:child_process";
-import { performance } from "node:perf_hooks";
 import { extname, join, normalize, relative, resolve } from "node:path";
 import { readFileSync, statSync } from "node:fs";
 import { formatCommand } from "../src/lib/commandLine";
 import { discoverCommand } from "./discovery";
-import type { DiscoveryRequest, DiscoveryResponse, RunEvent, RunRequest } from "../src/lib/schema";
+import { runCommand } from "./runner";
+import type { DiscoveryRequest, RunRequest } from "../src/lib/schema";
 
 const STATIC_DIR = process.env.GIVEMEUI_STATIC_DIR;
 const HOST = process.env.GIVEMEUI_HOST ?? "127.0.0.1";
@@ -47,64 +46,6 @@ const server = createServer(async (req, res) => {
 server.listen(PORT, HOST, () => {
   console.log(`GIVEMEUI listening on http://${HOST}:${PORT}`);
 });
-
-async function runCommand(request: RunRequest, incoming: IncomingMessage, res: ServerResponse): Promise<void> {
-  const argv = [request.executable, ...request.baseArgs, ...request.args].filter(Boolean);
-  if (!request.executable || argv.length === 0) {
-    throw new Error("Run request is missing an executable.");
-  }
-
-  res.writeHead(200, {
-    "Content-Type": "application/x-ndjson; charset=utf-8",
-    "Cache-Control": "no-store",
-    Connection: "keep-alive"
-  });
-
-  const started = performance.now();
-  const child = spawn(request.executable, [...request.baseArgs, ...request.args], {
-    cwd: request.cwd,
-    shell: false,
-    env: { ...process.env, ...(request.env ?? {}) }
-  });
-
-  const writeEvent = (event: RunEvent) => {
-    res.write(`${JSON.stringify(event)}\n`);
-  };
-
-  writeEvent({ type: "start", command: argv, at: new Date().toISOString() });
-
-  const timer = setTimeout(() => {
-    child.kill("SIGTERM");
-  }, request.timeoutMs ?? 120000);
-
-  incoming.on("close", () => {
-    if (!child.killed) child.kill("SIGTERM");
-  });
-
-  child.stdout?.on("data", (chunk) => {
-    writeEvent({ type: "stdout", chunk: chunk.toString(), at: new Date().toISOString() });
-  });
-
-  child.stderr?.on("data", (chunk) => {
-    writeEvent({ type: "stderr", chunk: chunk.toString(), at: new Date().toISOString() });
-  });
-
-  child.on("error", (error) => {
-    writeEvent({ type: "error", message: error.message, at: new Date().toISOString() });
-  });
-
-  child.on("close", (exitCode, signal) => {
-    clearTimeout(timer);
-    writeEvent({
-      type: "exit",
-      exitCode,
-      signal,
-      durationMs: Math.round(performance.now() - started),
-      at: new Date().toISOString()
-    });
-    res.end();
-  });
-}
 
 function readJson<T>(req: IncomingMessage): Promise<T> {
   return new Promise((resolve, reject) => {

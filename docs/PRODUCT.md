@@ -1,8 +1,8 @@
 # Product Direction
 
-GIVEMEUI is a command-line companion.
+GIVEMEUI is a locally installed command-line companion.
 
-It is not a generic app builder and it is not meant to hide the terminal from people who know how to use it. Its job is to make command-line tools faster, safer, and easier to operate by generating a focused UI around the tool's documented flags, arguments, presets, output, and run history.
+It is not a hosted web app, a generic app builder, or a mobile product. Its job is to make command-line tools faster, safer, and easier to operate by generating a focused local UI around the tool's documented flags, arguments, presets, output, and run history.
 
 Think of it like a Wireshark-style interface for terminal workflows: the power still comes from the underlying command-line tool, but the user gets a structured interface for choosing options, previewing the exact command, running it, and reading the result.
 
@@ -15,6 +15,8 @@ Start with Unix-like systems:
 - macOS.
 
 Windows support can come later, but V1 should optimize for tools and workflows common on Linux and macOS shells.
+
+Mobile operating systems are not a V1 target.
 
 ## Core User Flow
 
@@ -61,7 +63,7 @@ Security-oriented tools are in scope as local tools a user may already be author
 
 GIVEMEUI can wrap powerful tools, including dual-use tools. That requires product-level guardrails:
 
-- Run local executables only after clear user action.
+- Run local executables only after clear user action and explicit executable trust.
 - Store commands as argument arrays, not shell strings.
 - Show exact command previews before execution.
 - Mark destructive, privileged, credential-based, network-scanning, or brute-force-capable commands as sensitive when detected or adapter-provided.

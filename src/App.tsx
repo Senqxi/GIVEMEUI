@@ -19,14 +19,17 @@ import {
 import { discoverTool, runCommandStream } from "./lib/api";
 import { buildCommandPreview, buildRunRequest, initialValuesFor, type FieldValues } from "./lib/commandBuilder";
 import { formatCommand } from "./lib/commandLine";
+import { parseEnvText, timeoutMsFromSeconds } from "./lib/runSettings";
 import { sampleManifest } from "./lib/sampleData";
 import {
   appendPreset,
   appendRun,
   createStorageId,
+  isExecutableTrusted,
   loadWorkspace,
   persistWorkspace,
   redactSecretValues,
+  trustExecutable,
   upsertManifest,
   type SavedPreset,
   type StoredRun,
@@ -59,6 +62,14 @@ type RunCapture = {
   stdout: string;
   stderr: string;
   startedAt: string;
+  cwd?: string;
+  envKeys?: string[];
+};
+
+type RunSettings = {
+  cwd: string;
+  envText: string;
+  timeoutSeconds: number;
 };
 
 type FieldDraft = {
@@ -78,6 +89,11 @@ type FieldDraft = {
 
 const FIELD_KINDS: FieldKind[] = ["string", "number", "boolean", "enum", "file", "directory", "multi-file", "secret", "array", "raw"];
 const MAX_VISIBLE_FIELDS = 18;
+const DEFAULT_RUN_SETTINGS: RunSettings = {
+  cwd: "",
+  envText: "",
+  timeoutSeconds: 120
+};
 
 export function App() {
   const [workspaceState, setWorkspaceState] = useState<WorkspaceState>(() => loadWorkspace(sampleManifest));
@@ -102,6 +118,7 @@ export function App() {
   });
   const [isDiscovering, setIsDiscovering] = useState(false);
   const [activeConsoleTab, setActiveConsoleTab] = useState<"all" | "stdout" | "stderr">("all");
+  const [runSettings, setRunSettings] = useState<RunSettings>(DEFAULT_RUN_SETTINGS);
   const abortRef = useRef<AbortController | null>(null);
   const runCaptureRef = useRef<RunCapture | null>(null);
 
@@ -123,6 +140,7 @@ export function App() {
     return workspaceState.presets.filter((preset) => preset.toolId === manifest.id && preset.commandId === selectedCommand.id);
   }, [manifest.id, selectedCommand.id, workspaceState.presets]);
   const schemaValidation = useMemo(() => validateToolManifest(manifest), [manifest]);
+  const executableTrusted = useMemo(() => isExecutableTrusted(workspaceState, manifest.executable), [manifest.executable, workspaceState]);
 
   const fieldStats = useMemo(() => {
     const total = selectedCommand.fields.length || 1;
@@ -188,10 +206,27 @@ export function App() {
 
   async function handleRun() {
     if (runState.running) return;
+    if (!isExecutableTrusted(workspaceState, manifest.executable)) {
+      appendConsole("stderr", `Trust ${manifest.executable} before running local commands.`);
+      return;
+    }
 
-    const request = buildRunRequest(manifest, selectedCommand, values);
+    let env: Record<string, string> | undefined;
+    try {
+      env = parseEnvText(runSettings.envText);
+    } catch (error) {
+      appendConsole("stderr", error instanceof Error ? error.message : "Invalid environment settings.");
+      return;
+    }
+
+    const runOptions = {
+      cwd: runSettings.cwd.trim() || undefined,
+      env,
+      timeoutMs: timeoutMsFromSeconds(runSettings.timeoutSeconds)
+    };
+    const request = buildRunRequest(manifest, selectedCommand, values, runOptions);
     const redactedValues = redactSecretValues(selectedCommand.fields, values, "[redacted]");
-    const redactedRequest = buildRunRequest(manifest, selectedCommand, redactedValues);
+    const redactedRequest = buildRunRequest(manifest, selectedCommand, redactedValues, runOptions);
     const actualCommand = [request.executable, ...request.baseArgs, ...request.args];
     const redactedCommand = [redactedRequest.executable, ...redactedRequest.baseArgs, ...redactedRequest.args];
     const controller = new AbortController();
@@ -205,7 +240,9 @@ export function App() {
       preview: formatCommand(redactedCommand),
       stdout: "",
       stderr: "",
-      startedAt: new Date().toISOString()
+      startedAt: new Date().toISOString(),
+      cwd: request.cwd,
+      envKeys: request.env ? Object.keys(request.env).sort() : undefined
     };
     setRunState({ running: true, exitCode: null, durationMs: null, command: actualCommand });
     appendConsole("system", `Running ${formatCommand(redactedCommand)}`);
@@ -236,6 +273,18 @@ export function App() {
     setRunState((state) => ({ ...state, running: false }));
   }
 
+  function handleTrustExecutable() {
+    commitWorkspace((current) =>
+      trustExecutable(current, {
+        executable: manifest.executable,
+        name: manifest.name,
+        source: manifest.source === "imported" ? "imported" : "user",
+        trustedAt: new Date().toISOString()
+      })
+    );
+    appendConsole("system", `Trusted executable for local runs: ${manifest.executable}`);
+  }
+
   function handleRunEvent(event: RunEvent) {
     if (event.type === "start") {
       setRunState((state) => ({ ...state, command: event.command }));
@@ -264,7 +313,7 @@ export function App() {
       exitCode: event.exitCode,
       durationMs: event.durationMs
     }));
-    appendConsole("system", `Exited with code ${event.exitCode ?? "signal"} in ${event.durationMs}ms.`);
+    appendConsole("system", `${event.timedOut ? "Timed out" : "Exited"} with code ${event.exitCode ?? event.signal ?? "signal"} in ${event.durationMs}ms.`);
 
     if (runCaptureRef.current) {
       const capture = runCaptureRef.current;
@@ -277,7 +326,11 @@ export function App() {
         command: capture.command,
         preview: capture.preview,
         exitCode: event.exitCode,
+        signal: event.signal,
         durationMs: event.durationMs,
+        timedOut: event.timedOut,
+        cwd: capture.cwd,
+        envKeys: capture.envKeys,
         stdout: capture.stdout,
         stderr: capture.stderr,
         startedAt: capture.startedAt,
@@ -488,13 +541,18 @@ export function App() {
               onValueChange={(fieldId, value) => setValues((current) => ({ ...current, [fieldId]: value }))}
             />
             <CommandPreview
+              executable={manifest.executable}
+              isTrusted={executableTrusted}
               presets={commandPresets}
               preview={commandPreview}
+              runSettings={runSettings}
               runState={runState}
               onCancel={handleCancel}
               onLoadPreset={handleLoadPreset}
               onRun={handleRun}
+              onRunSettingsChange={setRunSettings}
               onSavePreset={handleSavePreset}
+              onTrustExecutable={handleTrustExecutable}
             />
           </section>
           <aside className="inspector-panel">
@@ -761,20 +819,30 @@ function GeneratedField({
 }
 
 function CommandPreview({
+  executable,
+  isTrusted,
   presets,
   preview,
+  runSettings,
   onRun,
   onCancel,
   onSavePreset,
   onLoadPreset,
+  onRunSettingsChange,
+  onTrustExecutable,
   runState
 }: {
+  executable: string;
+  isTrusted: boolean;
   presets: SavedPreset[];
   preview: string;
+  runSettings: RunSettings;
   onRun: () => void;
   onCancel: () => void;
   onSavePreset: () => void;
   onLoadPreset: (presetId: string) => void;
+  onRunSettingsChange: (settings: RunSettings) => void;
+  onTrustExecutable: () => void;
   runState: RunState;
 }) {
   return (
@@ -802,7 +870,7 @@ function CommandPreview({
                 Cancel
               </button>
             ) : null}
-            <button className="primary-button" data-testid="run-command" onClick={onRun} disabled={runState.running}>
+            <button className="primary-button" data-testid="run-command" onClick={onRun} disabled={runState.running || !isTrusted}>
               <Play size={16} />
               Run
             </button>
@@ -810,6 +878,50 @@ function CommandPreview({
         </div>
       </div>
       <pre>{preview}</pre>
+      <div className={`run-safety-panel ${isTrusted ? "trusted" : "untrusted"}`}>
+        <div>
+          <strong>{isTrusted ? "Trusted executable" : "Trust required"}</strong>
+          <code>{executable}</code>
+        </div>
+        {isTrusted ? (
+          <span>argument-array execution</span>
+        ) : (
+          <button className="secondary-button compact-button" data-testid="trust-executable" onClick={onTrustExecutable}>
+            Trust Executable
+          </button>
+        )}
+      </div>
+      <div className="run-settings-grid">
+        <label className="run-setting-field">
+          <span>Working Directory</span>
+          <input
+            data-testid="run-cwd"
+            value={runSettings.cwd}
+            placeholder="Use GIVEMEUI process directory"
+            onChange={(event) => onRunSettingsChange({ ...runSettings, cwd: event.target.value })}
+          />
+        </label>
+        <label className="run-setting-field">
+          <span>Timeout Seconds</span>
+          <input
+            data-testid="run-timeout"
+            type="number"
+            min={1}
+            max={1800}
+            value={runSettings.timeoutSeconds}
+            onChange={(event) => onRunSettingsChange({ ...runSettings, timeoutSeconds: Number(event.target.value) })}
+          />
+        </label>
+        <label className="run-setting-field env-field">
+          <span>Environment</span>
+          <textarea
+            data-testid="run-env"
+            value={runSettings.envText}
+            placeholder="KEY=value"
+            onChange={(event) => onRunSettingsChange({ ...runSettings, envText: event.target.value })}
+          />
+        </label>
+      </div>
     </section>
   );
 }
@@ -1237,7 +1349,7 @@ function OutputConsole({
                 <span>
                   <strong>{run.toolName}</strong>
                   <small>
-                    exit {run.exitCode ?? "signal"} · {run.durationMs}ms · {new Date(run.completedAt).toLocaleTimeString()}
+                    {run.timedOut ? "timeout" : `exit ${run.exitCode ?? run.signal ?? "signal"}`} · {run.durationMs}ms · {new Date(run.completedAt).toLocaleTimeString()}
                   </small>
                 </span>
                 <code>{run.preview}</code>
@@ -1287,12 +1399,14 @@ function createConsoleLines(stream: ConsoleLine["stream"], text: string, at = ne
 
 function consoleLinesForRun(run: StoredRun): ConsoleLine[] {
   const summary = createConsoleLines("system", `Loaded saved run: ${run.preview}`, run.completedAt);
+  const cwd = run.cwd ? createConsoleLines("system", `Working directory: ${run.cwd}`, run.completedAt) : [];
+  const env = run.envKeys?.length ? createConsoleLines("system", `Environment keys: ${run.envKeys.join(", ")}`, run.completedAt) : [];
   const stdout = createConsoleLines("stdout", run.stdout, run.completedAt);
   const stderr = createConsoleLines("stderr", run.stderr, run.completedAt);
 
   if (stdout.length === 0 && stderr.length === 0) {
-    return [...summary, ...createConsoleLines("system", "No output captured for this run.", run.completedAt)];
+    return [...summary, ...cwd, ...env, ...createConsoleLines("system", "No output captured for this run.", run.completedAt)];
   }
 
-  return [...summary, ...stdout, ...stderr];
+  return [...summary, ...cwd, ...env, ...stdout, ...stderr];
 }

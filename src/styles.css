@@ -561,8 +561,8 @@ button:not(:disabled):hover {
 .command-preview pre {
   margin: 0;
   min-height: 56px;
-  max-height: 108px;
-  padding: 12px 18px 18px;
+  max-height: 88px;
+  padding: 12px 18px;
   overflow: auto;
   color: #15212d;
   font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
@@ -570,6 +570,102 @@ button:not(:disabled):hover {
   line-height: 1.55;
   white-space: pre-wrap;
   word-break: break-word;
+}
+
+.run-safety-panel {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+  margin: 0 18px 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.run-safety-panel.untrusted {
+  border-color: #f0d39a;
+  background: #fff8e7;
+}
+
+.run-safety-panel.trusted {
+  border-color: #cfe2dd;
+  background: #f0fbf6;
+}
+
+.run-safety-panel div {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.run-safety-panel strong {
+  color: var(--muted-strong);
+  font-size: 12px;
+}
+
+.run-safety-panel code {
+  min-width: 0;
+  overflow: hidden;
+  color: #15212d;
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.run-safety-panel span {
+  color: var(--success);
+  font-size: 12px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.run-settings-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.3fr) 130px minmax(180px, 0.9fr);
+  gap: 10px;
+  padding: 0 18px 14px;
+}
+
+.run-setting-field {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+}
+
+.run-setting-field span {
+  color: var(--muted-strong);
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.run-setting-field input,
+.run-setting-field textarea {
+  width: 100%;
+  min-height: 32px;
+  border: 1px solid var(--line-strong);
+  border-radius: 6px;
+  padding: 0 8px;
+  outline: 0;
+  background: #ffffff;
+  color: var(--text);
+  font-size: 12px;
+}
+
+.run-setting-field textarea {
+  min-height: 32px;
+  max-height: 70px;
+  padding-top: 7px;
+  resize: vertical;
+}
+
+.run-setting-field input:focus,
+.run-setting-field textarea:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(15, 143, 143, 0.13);
 }
 
 .schema-summary {

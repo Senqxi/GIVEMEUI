@@ -62,16 +62,19 @@ Exit criteria:
 1. User fills out generated UI fields.
 2. GIVEMEUI builds an argument-array run request.
 3. User sees the exact command preview before running.
-4. User clicks Run.
-5. GIVEMEUI executes the local process without shell interpolation.
-6. GIVEMEUI streams stdout and stderr separately.
-7. User sees exit code, duration, and run history.
+4. User explicitly trusts the resolved executable if it has not been trusted before.
+5. User optionally sets a working directory, timeout, and environment variables.
+6. User clicks Run.
+7. GIVEMEUI executes the local process without shell interpolation.
+8. GIVEMEUI streams stdout and stderr separately.
+9. User sees exit code, signal, timeout state, duration, and run history.
 
 Exit criteria:
 
 - The preview matches the executed argument array.
 - Runs can be canceled.
 - Secret values are redacted from reusable persistence.
+- Environment values are not stored in run history.
 
 ## Workflow 4: Save A Repeatable Preset
 
@@ -91,7 +94,7 @@ Exit criteria:
 1. User discovers a locally installed security tool they are authorized to run.
 2. GIVEMEUI parses documented flags into a UI.
 3. GIVEMEUI marks sensitive fields and command categories when detected or adapter-provided.
-4. User must still review the exact command preview before execution.
+4. User must explicitly trust the executable and review the exact command preview before execution.
 5. GIVEMEUI does not provide unauthorized targets, credential lists, or attack-playbook presets.
 
 Exit criteria:
@@ -118,6 +121,6 @@ givemeui
 
 Exit criteria:
 
-- `givemeui` serves the UI and API from one local process.
+- `givemeui` serves the local desktop UI and API from one local process.
 - No hosted backend is required.
 - CI verifies the package contents before release.

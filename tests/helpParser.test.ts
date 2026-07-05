@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
-import { buildArgs, initialValuesFor } from "../src/lib/commandBuilder";
+import { buildArgs, buildRunRequest, initialValuesFor } from "../src/lib/commandBuilder";
 import { formatCommand } from "../src/lib/commandLine";
 import { commandLineForHelp, helpCommandCandidates, parseFields, parseHelpOutput } from "../src/lib/helpParser";
 import type { CommandSpec } from "../src/lib/schema";
@@ -186,6 +186,30 @@ describe("buildArgs", () => {
       "a file.txt",
       "--dry-run"
     ]);
+  });
+
+  it("carries local run settings without changing argument construction", () => {
+    const command: CommandSpec = {
+      id: "demo",
+      name: "demo",
+      fields: [{ id: "name", label: "Name", kind: "string", required: false, flag: "--name", confidence: 1 }]
+    };
+    const manifest = parseHelpOutput("Usage: demo [--name NAME]", "demo --help");
+    const request = buildRunRequest(manifest, command, { name: "report" }, {
+      cwd: "/tmp",
+      env: { GIVEMEUI_TEST: "1" },
+      timeoutMs: 5000
+    });
+
+    expect(request).toEqual(
+      expect.objectContaining({
+        executable: "demo",
+        args: ["--name", "report"],
+        cwd: "/tmp",
+        env: { GIVEMEUI_TEST: "1" },
+        timeoutMs: 5000
+      })
+    );
   });
 });
 

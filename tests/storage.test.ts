@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { appendRun, createWorkspace, redactSecretValues, upsertManifest, type StoredRun } from "../src/lib/storage";
+import { appendRun, createWorkspace, isExecutableTrusted, redactSecretValues, trustExecutable, upsertManifest, type StoredRun } from "../src/lib/storage";
 import { sampleManifest } from "../src/lib/sampleData";
 import type { CommandSpec, ToolManifest } from "../src/lib/schema";
 
@@ -50,6 +50,22 @@ describe("workspace storage helpers", () => {
       token: "[redacted]",
       name: "build"
     });
+  });
+
+  it("requires explicit executable trust records", () => {
+    const workspace = createWorkspace(sampleManifest);
+
+    expect(isExecutableTrusted(workspace, sampleManifest.executable)).toBe(false);
+
+    const next = trustExecutable(workspace, {
+      executable: sampleManifest.executable,
+      name: sampleManifest.name,
+      source: "user",
+      trustedAt: "2026-07-05T00:00:00.000Z"
+    });
+
+    expect(isExecutableTrusted(next, sampleManifest.executable)).toBe(true);
+    expect(next.trustedExecutables).toHaveLength(1);
   });
 });
 
