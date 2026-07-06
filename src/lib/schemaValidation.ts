@@ -1,4 +1,4 @@
-import type { CommandSpec, FieldKind, FieldSpec, ToolManifest, ToolSource } from "./schema";
+import type { AdapterMetadata, CommandSpec, FieldKind, FieldSpec, ToolManifest, ToolSource } from "./schema";
 
 export type SchemaValidationResult = {
   valid: boolean;
@@ -43,6 +43,7 @@ export function validateToolManifest(value: unknown): SchemaValidationResult {
 
   requireString(manifest.createdAt, "createdAt", errors);
   requireString(manifest.updatedAt, "updatedAt", errors);
+  validateAdapters(manifest.adapters, errors);
 
   return { valid: errors.length === 0, errors, warnings };
 }
@@ -154,6 +155,34 @@ function validateFields(fields: unknown[], commandIndex: number, errors: string[
 
     if (!field.flag && !field.shortFlag && field.position === undefined) {
       warnings.push(`${prefix} has no flag or positional index.`);
+    }
+  });
+}
+
+function validateAdapters(adapters: unknown, errors: string[]): void {
+  if (adapters === undefined) return;
+  if (!Array.isArray(adapters)) {
+    errors.push("adapters must be an array when provided.");
+    return;
+  }
+
+  adapters.forEach((item, index) => {
+    if (!item || typeof item !== "object") {
+      errors.push(`adapters[${index}] must be an object.`);
+      return;
+    }
+
+    const adapter = item as Partial<AdapterMetadata>;
+    requireString(adapter.id, `adapters[${index}].id`, errors);
+    requireString(adapter.name, `adapters[${index}].name`, errors);
+    requireString(adapter.appliedAt, `adapters[${index}].appliedAt`, errors);
+
+    if (adapter.version !== undefined && typeof adapter.version !== "string") {
+      errors.push(`adapters[${index}].version must be a string when provided.`);
+    }
+
+    if (!Array.isArray(adapter.notes) || !adapter.notes.every((note) => typeof note === "string")) {
+      errors.push(`adapters[${index}].notes must be an array of strings.`);
     }
   });
 }

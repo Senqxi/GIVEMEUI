@@ -5,7 +5,14 @@ export type ToolAdapter = {
   id: string;
   name: string;
   identify(manifest: ToolManifest): boolean;
+  version(manifest: ToolManifest): AdapterVersionInfo;
   enhance(manifest: ToolManifest): ToolManifest;
+};
+
+export type AdapterVersionInfo = {
+  detectedVersion?: string;
+  supported: boolean;
+  notes: string[];
 };
 
 const nowIso = () => new Date().toISOString();
@@ -29,6 +36,7 @@ function ffmpegAdapter(): ToolAdapter {
     id: "ffmpeg",
     name: "FFmpeg",
     identify: (manifest) => toolName(manifest) === "ffmpeg",
+    version: (manifest) => adapterVersionInfo(manifest, /^ffmpeg version\s+/i),
     enhance(manifest) {
       return {
         ...manifest,
@@ -83,6 +91,7 @@ function ytDlpAdapter(): ToolAdapter {
     id: "yt-dlp",
     name: "yt-dlp",
     identify: (manifest) => toolName(manifest) === "yt-dlp",
+    version: (manifest) => adapterVersionInfo(manifest, /^yt-dlp\s+/i),
     enhance(manifest) {
       return {
         ...manifest,
@@ -122,6 +131,7 @@ function gitAdapter(): ToolAdapter {
     id: "git",
     name: "Git",
     identify: (manifest) => toolName(manifest) === "git",
+    version: (manifest) => adapterVersionInfo(manifest, /^git version\s+/i),
     enhance(manifest) {
       const rootCommand = enhanceCommand(updateFields(manifest.commands[0], {
         "-C": { label: "Repository Directory", kind: "directory", ui: { group: "Repository", advanced: false, control: "file" } },
@@ -192,13 +202,36 @@ function gitDiffCommand(): CommandSpec {
 function addAdapterMetadata(manifest: ToolManifest, adapter: ToolAdapter): ToolManifest {
   const existing = manifest.adapters ?? [];
   if (existing.some((item) => item.id === adapter.id)) return manifest;
+  const versionInfo = adapter.version(manifest);
   const metadata: AdapterMetadata = {
     id: adapter.id,
     name: adapter.name,
+    version: versionInfo.detectedVersion,
     appliedAt: nowIso(),
-    notes: [`${adapter.name} adapter enhanced this schema.`]
+    notes: [`${adapter.name} adapter enhanced this schema.`, ...versionInfo.notes]
   };
   return { ...manifest, adapters: [...existing, metadata], source: manifest.source === "detected" ? "detected" : manifest.source };
+}
+
+function adapterVersionInfo(manifest: ToolManifest, expectedPattern: RegExp): AdapterVersionInfo {
+  const detectedVersion = manifest.version ?? manifest.discovery?.version;
+  if (!detectedVersion) {
+    return {
+      supported: true,
+      notes: ["Adapter applied without a detected tool version; review exported schemas before sharing."]
+    };
+  }
+
+  const supported = expectedPattern.test(detectedVersion);
+  return {
+    detectedVersion,
+    supported,
+    notes: [
+      supported
+        ? `Adapter matched detected version: ${detectedVersion}`
+        : `Adapter applied to an unrecognized version string: ${detectedVersion}`
+    ]
+  };
 }
 
 function enhanceCommand(command: CommandSpec, patch: Partial<CommandSpec>): CommandSpec {

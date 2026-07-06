@@ -1,7 +1,7 @@
 import type { FieldValues } from "./commandBuilder";
 import { DEFAULT_AI_SETTINGS, normalizeAiSettings, type AiSettings } from "./ai";
 import type { OutputAnalysis } from "./outputAnalysis";
-import type { CommandSpec, FieldKind, FieldSpec, ToolManifest, ToolSource } from "./schema";
+import type { AdapterMetadata, CommandSpec, FieldKind, FieldSpec, ToolManifest, ToolSource } from "./schema";
 import { normalizeToolManifest } from "./schemaValidation";
 
 const STORAGE_KEY = "givemeui.workspace.v1";
@@ -179,6 +179,7 @@ export function isToolManifest(value: unknown): value is ToolManifest {
     Array.isArray(manifest.baseArgs) &&
     Array.isArray(manifest.commands) &&
     manifest.commands.every(isCommandSpec) &&
+    (manifest.adapters === undefined || (Array.isArray(manifest.adapters) && manifest.adapters.every(isAdapterMetadata))) &&
     typeof manifest.createdAt === "string" &&
     typeof manifest.updatedAt === "string"
   );
@@ -250,6 +251,19 @@ function isTrustedExecutable(value: unknown): value is TrustedExecutable {
     (trusted.name === undefined || typeof trusted.name === "string") &&
     (trusted.source === "user" || trusted.source === "imported") &&
     typeof trusted.trustedAt === "string"
+  );
+}
+
+function isAdapterMetadata(value: unknown): boolean {
+  if (!value || typeof value !== "object") return false;
+  const adapter = value as Partial<AdapterMetadata>;
+  return (
+    typeof adapter.id === "string" &&
+    typeof adapter.name === "string" &&
+    (adapter.version === undefined || typeof adapter.version === "string") &&
+    typeof adapter.appliedAt === "string" &&
+    Array.isArray(adapter.notes) &&
+    adapter.notes.every((note) => typeof note === "string")
   );
 }
 

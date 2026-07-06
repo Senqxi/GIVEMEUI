@@ -551,16 +551,16 @@ Improve quality for popular tools with dedicated adapters.
 
 ### Tasks
 
-1. Create adapter interface.
-2. Implement adapter registry.
-3. Add adapter tests.
-4. Implement first three high-value adapters.
-5. Add import/export for adapter-generated schemas.
+1. Create adapter interface. **Complete.**
+2. Implement adapter registry. **Complete.**
+3. Add adapter tests. **Complete.**
+4. Implement first three high-value adapters. **Complete.**
+5. Add import/export for adapter-generated schemas. **Complete.**
 
 ### Exit Criteria
 
-- At least three popular tools produce noticeably better UIs than generic parsing.
-- Adapter behavior is tested and version-aware.
+- At least three popular tools produce noticeably better UIs than generic parsing. **Complete.**
+- Adapter behavior is tested and version-aware. **Complete.**
 
 ## Phase 8: Workflow Builder
 

@@ -11,10 +11,21 @@ describe("tool adapters", () => {
   });
 
   it("enhances ffmpeg with media output metadata and focused fields", () => {
-    const manifest = applyToolAdapters(parseHelpOutput(readFixture("ffmpeg.txt"), "ffmpeg --help"));
+    const manifest = applyToolAdapters(
+      parseHelpOutput(readFixture("ffmpeg.txt"), "ffmpeg --help", {
+        version: "ffmpeg version 7.1 Copyright (c) the FFmpeg developers"
+      })
+    );
     const command = manifest.commands[0];
 
     expect(manifest.adapters?.map((adapter) => adapter.id)).toContain("ffmpeg");
+    expect(manifest.adapters?.[0]).toEqual(
+      expect.objectContaining({
+        id: "ffmpeg",
+        version: "ffmpeg version 7.1 Copyright (c) the FFmpeg developers",
+        notes: expect.arrayContaining([expect.stringContaining("Adapter matched detected version")])
+      })
+    );
     expect(command.output?.expectedTypes).toEqual(expect.arrayContaining(["video", "audio", "image", "file"]));
     expect(command.fields).toEqual(
       expect.arrayContaining([

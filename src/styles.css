@@ -163,6 +163,10 @@ button {
   color: #dce7ef;
 }
 
+.schema-file-input {
+  display: none;
+}
+
 .danger-button {
   padding: 0 12px;
   background: #fff1f0;

@@ -23,6 +23,7 @@ import { formatCommand } from "./lib/commandLine";
 import { analyzeRunOutput, type OutputAnalysis, type OutputArtifact } from "./lib/outputAnalysis";
 import { parseEnvText, timeoutMsFromSeconds } from "./lib/runSettings";
 import { sampleManifest } from "./lib/sampleData";
+import { exportSchemaJson, importSchemaJson, schemaExportFilename } from "./lib/schemaTransfer";
 import {
   appendPreset,
   appendRun,
@@ -38,7 +39,7 @@ import {
   type WorkspaceState
 } from "./lib/storage";
 import { confidenceLevel, type CommandSpec, type FieldKind, type FieldSpec, type FieldUiHints, type RunEvent, type ToolManifest } from "./lib/schema";
-import { isReviewField, normalizeToolManifest, validateToolManifest, type SchemaValidationResult } from "./lib/schemaValidation";
+import { isReviewField, validateToolManifest, type SchemaValidationResult } from "./lib/schemaValidation";
 
 type ConsoleLine = {
   id: string;
@@ -132,6 +133,7 @@ export function App() {
   const [aiExplaining, setAiExplaining] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
   const runCaptureRef = useRef<RunCapture | null>(null);
+  const schemaFileInputRef = useRef<HTMLInputElement | null>(null);
 
   const manifest = useMemo(() => {
     return workspaceState.manifests.find((tool) => tool.id === workspaceState.activeToolId) ?? workspaceState.manifests[0] ?? sampleManifest;
@@ -555,15 +557,16 @@ export function App() {
   }
 
   async function handleExportSchema() {
-    const json = JSON.stringify(manifest, null, 2);
+    const json = exportSchemaJson(manifest);
+    const filename = schemaExportFilename(manifest);
+    downloadText(filename, json);
 
     try {
       if (!navigator.clipboard?.writeText) throw new Error("Clipboard unavailable.");
       await navigator.clipboard.writeText(json);
-      appendConsole("system", `Copied ${manifest.name} schema JSON to clipboard.`);
+      appendConsole("system", `Exported ${filename} and copied schema JSON to clipboard.`);
     } catch {
-      window.prompt("Copy schema JSON", json);
-      appendConsole("system", `Opened ${manifest.name} schema JSON for copying.`);
+      appendConsole("system", `Exported ${filename}. Clipboard copy is unavailable in this browser.`);
     }
   }
 
@@ -571,18 +574,24 @@ export function App() {
     const pasted = window.prompt("Paste a ToolManifest JSON object");
     if (!pasted) return;
 
-    try {
-      const parsed: unknown = JSON.parse(pasted);
-      const validation = validateToolManifest(parsed);
-      if (!validation.valid) {
-        throw new Error(`Schema import failed: ${validation.errors.slice(0, 3).join(" ")}`);
-      }
+    importSchemaText(pasted);
+  }
 
-      const imported: ToolManifest = {
-        ...normalizeToolManifest(parsed as ToolManifest),
-        source: "imported",
-        updatedAt: new Date().toISOString()
-      };
+  async function handleImportSchemaFile(event: React.ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+
+    try {
+      importSchemaText(await file.text());
+    } catch (error) {
+      appendConsole("stderr", error instanceof Error ? error.message : "Schema file import failed.");
+    }
+  }
+
+  function importSchemaText(input: string) {
+    try {
+      const { manifest: imported, validation } = importSchemaJson(input);
       commitWorkspace((current) => upsertManifest(current, imported));
       setSelectedCommandId(imported.commands[0].id);
       setSelectedFieldId(imported.commands[0].fields.find(isReviewField)?.id ?? imported.commands[0].fields[0]?.id ?? null);
@@ -687,8 +696,19 @@ export function App() {
               subtitle="Editable schema draft"
               action={
                 <div className="schema-actions">
+                  <input
+                    ref={schemaFileInputRef}
+                    aria-label="Import schema JSON file"
+                    className="schema-file-input"
+                    type="file"
+                    accept="application/json,.json"
+                    onChange={(event) => void handleImportSchemaFile(event)}
+                  />
+                  <button className="mini-button" onClick={() => schemaFileInputRef.current?.click()}>
+                    Import File
+                  </button>
                   <button className="mini-button" onClick={handleImportSchema}>
-                    Import
+                    Paste
                   </button>
                   <button className="mini-button" onClick={() => void handleExportSchema()}>
                     Export
@@ -1199,6 +1219,10 @@ function SchemaSummary({
 function ToolDiscoveryPanel({ manifest }: { manifest: ToolManifest }) {
   const discovery = manifest.discovery;
   const adapterLabels = manifest.adapters?.map((adapter) => adapter.name).join(", ");
+  const adapterVersions = manifest.adapters
+    ?.map((adapter) => [adapter.name, adapter.version].filter(Boolean).join(" "))
+    .filter(Boolean)
+    .join(", ");
 
   if (!discovery) {
     return (
@@ -1211,6 +1235,12 @@ function ToolDiscoveryPanel({ manifest }: { manifest: ToolManifest }) {
           <div className="metadata-row">
             <span>Adapter</span>
             <code>{adapterLabels}</code>
+          </div>
+        ) : null}
+        {adapterVersions ? (
+          <div className="metadata-row">
+            <span>Adapter Ver</span>
+            <code>{adapterVersions}</code>
           </div>
         ) : null}
       </section>
@@ -1245,6 +1275,12 @@ function ToolDiscoveryPanel({ manifest }: { manifest: ToolManifest }) {
         <div className="metadata-row">
           <span>Adapter</span>
           <code>{adapterLabels}</code>
+        </div>
+      ) : null}
+      {adapterVersions ? (
+        <div className="metadata-row">
+          <span>Adapter Ver</span>
+          <code>{adapterVersions}</code>
         </div>
       ) : null}
       {discovery.warnings.length > 0 ? (

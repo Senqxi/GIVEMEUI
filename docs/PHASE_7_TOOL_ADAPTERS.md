@@ -10,6 +10,8 @@ Adapters do not replace discovery. They identify known tools after help output i
 - Adapter provenance stored on `ToolManifest`.
 - Discovery-time adapter application.
 - UI display for applied adapters.
+- Adapter version provenance displayed and exported with schemas.
+- File-based schema import/export for adapter-enhanced manifests.
 - Tests for adapter matching and enhancements.
 - Initial adapters:
   - `ffmpeg`
@@ -44,6 +46,7 @@ Adapters cannot:
 - Adds media output expectations.
 - Adds examples for transcoding and extracting audio.
 - Adds overwrite-review safety notes.
+- Records detected FFmpeg version metadata when discovery captures it.
 
 ### yt-dlp
 
@@ -51,6 +54,7 @@ Adapters cannot:
 - Groups authentication, network, archive, playlist, format, and output fields.
 - Adds media/file output expectations.
 - Adds review notes for URL, proxy, cookies, and output template.
+- Records detected yt-dlp version metadata when discovery captures it.
 
 ### Git
 
@@ -60,6 +64,21 @@ Adapters cannot:
   - `log`
   - `diff`
 - Adds local repository context safety notes.
+- Records detected Git version metadata when discovery captures it.
+
+## Import And Export
+
+Adapter-enhanced schemas can be exported as `.givemeui.schema.json` files from Schema Review.
+
+Exports include:
+
+- the normalized command schema
+- adapter ids and names
+- detected adapter version strings
+- adapter notes
+- original discovery metadata when available
+
+Imported schemas are validated before storage. Invalid adapter metadata is rejected, and imported manifests keep adapter provenance while switching `source` to `imported` for review.
 
 ## Exit Criteria Status
 
@@ -68,11 +87,12 @@ Adapters cannot:
 - Adapter tests exist: complete.
 - At least three popular tools produce better schemas than generic parsing: complete.
 - Adapter behavior is visible in the UI: complete.
+- Adapter behavior is version-aware: complete.
+- Adapter-generated schemas can be exported and re-imported: complete.
 
 ## Next Hardening Steps
 
 - Add adapters for Docker, kubectl, Python argparse scripts, and npm scripts.
-- Add adapter version constraints for behavior that changes across releases.
+- Add stricter adapter version constraints for behavior that changes across releases.
 - Add adapter-specific output artifact resolvers.
 - Add a trusted-adapter review state before community adapter loading.
-- Add import/export metadata for adapter-enhanced schemas.
