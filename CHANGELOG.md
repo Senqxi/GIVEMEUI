@@ -23,6 +23,7 @@ This project follows the spirit of semantic versioning while it is pre-1.0: mino
 - Phase 5 deterministic output understanding with JSON, NDJSON, CSV/TSV, diagnostics, progress, artifact detection, and output copy/download controls.
 - Phase 6 optional local AI layer with provider settings, Ollama/LM Studio/OpenAI-compatible detection, output explanations, and reviewable schema suggestions.
 - Phase 7 tool adapter layer with registry support and initial adapters for FFmpeg, yt-dlp, and Git.
+- Phase 8 workflow builder with saved sequential workflows, previous-step variable references, step-by-step/full workflow runs, and per-step logs/artifacts.
 
 ### Security
 
@@ -35,6 +36,7 @@ This project follows the spirit of semantic versioning while it is pre-1.0: mino
 - Run history stores environment key names only, not environment values.
 - AI suggestions never execute commands and must be reviewed before changing schemas.
 - Tool adapters improve metadata only; command execution still requires preview and executable trust.
+- Workflow steps run through the same safe argument-array runner and require trusted executables.
 
 ## [0.1.0] - TBD
 

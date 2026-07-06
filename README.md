@@ -120,6 +120,7 @@ npm run pack:check
 - Phase 5 output understanding: [docs/PHASE_5_OUTPUT_UNDERSTANDING.md](./docs/PHASE_5_OUTPUT_UNDERSTANDING.md)
 - Phase 6 local AI: [docs/PHASE_6_LOCAL_AI.md](./docs/PHASE_6_LOCAL_AI.md)
 - Phase 7 tool adapters: [docs/PHASE_7_TOOL_ADAPTERS.md](./docs/PHASE_7_TOOL_ADAPTERS.md)
+- Phase 8 workflow builder: [docs/PHASE_8_WORKFLOW_BUILDER.md](./docs/PHASE_8_WORKFLOW_BUILDER.md)
 - V1 workflows: [docs/V1_WORKFLOWS.md](./docs/V1_WORKFLOWS.md)
 - Threat model: [docs/THREAT_MODEL.md](./docs/THREAT_MODEL.md)
 - Release process: [docs/RELEASE.md](./docs/RELEASE.md)

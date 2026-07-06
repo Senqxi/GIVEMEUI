@@ -3,12 +3,16 @@ import { DEFAULT_AI_SETTINGS, normalizeAiSettings, type AiSettings } from "./ai"
 import type { OutputAnalysis } from "./outputAnalysis";
 import type { AdapterMetadata, CommandSpec, FieldKind, FieldSpec, ToolManifest, ToolSource } from "./schema";
 import { normalizeToolManifest } from "./schemaValidation";
+import type { SavedWorkflow, StoredWorkflowRun, WorkflowStep, WorkflowStepRun, WorkflowStepStatus } from "./workflows";
 
 const STORAGE_KEY = "givemeui.workspace.v1";
 const MAX_RUNS = 60;
 const MAX_PRESETS = 120;
+const MAX_WORKFLOWS = 80;
+const MAX_WORKFLOW_RUNS = 80;
 const TOOL_SOURCES: ToolSource[] = ["detected", "imported", "manual", "ai-enhanced"];
 const FIELD_KINDS: FieldKind[] = ["string", "number", "boolean", "enum", "file", "directory", "multi-file", "secret", "array", "raw"];
+const WORKFLOW_STEP_STATUSES: WorkflowStepStatus[] = ["pending", "running", "succeeded", "failed", "skipped"];
 
 export type SavedPreset = {
   id: string;
@@ -54,6 +58,8 @@ export type WorkspaceState = {
   activeToolId: string;
   presets: SavedPreset[];
   runs: StoredRun[];
+  workflows: SavedWorkflow[];
+  workflowRuns: StoredWorkflowRun[];
   trustedExecutables: TrustedExecutable[];
   aiSettings: AiSettings;
 };
@@ -73,6 +79,8 @@ export function loadWorkspace(fallbackManifest: ToolManifest): WorkspaceState {
       activeToolId: typeof parsed.activeToolId === "string" ? parsed.activeToolId : fallbackManifest.id,
       presets: Array.isArray(parsed.presets) ? parsed.presets.filter(isSavedPreset).slice(0, MAX_PRESETS) : [],
       runs: Array.isArray(parsed.runs) ? parsed.runs.filter(isStoredRun).slice(0, MAX_RUNS) : [],
+      workflows: Array.isArray(parsed.workflows) ? parsed.workflows.filter(isSavedWorkflow).slice(0, MAX_WORKFLOWS) : [],
+      workflowRuns: Array.isArray(parsed.workflowRuns) ? parsed.workflowRuns.filter(isStoredWorkflowRun).slice(0, MAX_WORKFLOW_RUNS) : [],
       trustedExecutables: Array.isArray(parsed.trustedExecutables) ? parsed.trustedExecutables.filter(isTrustedExecutable) : [],
       aiSettings: normalizeAiSettings(parsed.aiSettings)
     };
@@ -104,6 +112,8 @@ export function createWorkspace(fallbackManifest: ToolManifest): WorkspaceState 
     activeToolId: fallbackManifest.id,
     presets: [],
     runs: [],
+    workflows: [],
+    workflowRuns: [],
     trustedExecutables: [],
     aiSettings: DEFAULT_AI_SETTINGS
   };
@@ -135,6 +145,26 @@ export function appendPreset(state: WorkspaceState, preset: SavedPreset): Worksp
   return {
     ...state,
     presets: [preset, ...state.presets].slice(0, MAX_PRESETS)
+  };
+}
+
+export function upsertWorkflow(state: WorkspaceState, workflow: SavedWorkflow): WorkspaceState {
+  const existingIndex = state.workflows.findIndex((current) => current.id === workflow.id);
+  const workflows =
+    existingIndex >= 0
+      ? state.workflows.map((current, index) => (index === existingIndex ? workflow : current))
+      : [workflow, ...state.workflows];
+
+  return {
+    ...state,
+    workflows: workflows.slice(0, MAX_WORKFLOWS)
+  };
+}
+
+export function appendWorkflowRun(state: WorkspaceState, run: StoredWorkflowRun): WorkspaceState {
+  return {
+    ...state,
+    workflowRuns: [run, ...state.workflowRuns].slice(0, MAX_WORKFLOW_RUNS)
   };
 }
 
@@ -239,6 +269,78 @@ function isStoredRun(value: unknown): value is StoredRun {
     typeof run.stderr === "string" &&
     typeof run.startedAt === "string" &&
     typeof run.completedAt === "string"
+  );
+}
+
+function isSavedWorkflow(value: unknown): value is SavedWorkflow {
+  if (!value || typeof value !== "object") return false;
+  const workflow = value as Partial<SavedWorkflow>;
+  return (
+    typeof workflow.id === "string" &&
+    typeof workflow.name === "string" &&
+    Array.isArray(workflow.steps) &&
+    workflow.steps.every(isWorkflowStep) &&
+    typeof workflow.createdAt === "string" &&
+    typeof workflow.updatedAt === "string"
+  );
+}
+
+function isWorkflowStep(value: unknown): value is WorkflowStep {
+  if (!value || typeof value !== "object") return false;
+  const step = value as Partial<WorkflowStep>;
+  return (
+    typeof step.id === "string" &&
+    typeof step.name === "string" &&
+    typeof step.toolId === "string" &&
+    typeof step.commandId === "string" &&
+    isFieldValues(step.values) &&
+    (step.runSettings === undefined || typeof step.runSettings === "object")
+  );
+}
+
+function isStoredWorkflowRun(value: unknown): value is StoredWorkflowRun {
+  if (!value || typeof value !== "object") return false;
+  const run = value as Partial<StoredWorkflowRun>;
+  return (
+    typeof run.id === "string" &&
+    typeof run.workflowId === "string" &&
+    typeof run.workflowName === "string" &&
+    typeof run.status === "string" &&
+    WORKFLOW_STEP_STATUSES.includes(run.status) &&
+    Array.isArray(run.stepRuns) &&
+    run.stepRuns.every(isWorkflowStepRun) &&
+    typeof run.startedAt === "string" &&
+    typeof run.completedAt === "string"
+  );
+}
+
+function isWorkflowStepRun(value: unknown): value is WorkflowStepRun {
+  if (!value || typeof value !== "object") return false;
+  const run = value as Partial<WorkflowStepRun>;
+  return (
+    typeof run.stepId === "string" &&
+    typeof run.stepName === "string" &&
+    Array.isArray(run.command) &&
+    typeof run.preview === "string" &&
+    typeof run.status === "string" &&
+    WORKFLOW_STEP_STATUSES.includes(run.status) &&
+    typeof run.durationMs === "number" &&
+    typeof run.stdout === "string" &&
+    typeof run.stderr === "string" &&
+    typeof run.startedAt === "string" &&
+    typeof run.completedAt === "string"
+  );
+}
+
+function isFieldValues(value: unknown): value is FieldValues {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  return Object.values(value).every(
+    (item) =>
+      item === undefined ||
+      typeof item === "string" ||
+      typeof item === "number" ||
+      typeof item === "boolean" ||
+      (Array.isArray(item) && item.every((entry) => typeof entry === "string"))
   );
 }
 

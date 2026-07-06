@@ -578,16 +578,16 @@ Let users chain commands into repeatable workflows.
 
 ### Tasks
 
-1. Define workflow schema.
-2. Build workflow editor.
-3. Build variable references between steps.
-4. Add workflow run screen.
-5. Add per-step logs and artifacts.
+1. Define workflow schema. **Complete.**
+2. Build workflow editor. **Complete.**
+3. Build variable references between steps. **Complete.**
+4. Add workflow run screen. **Complete.**
+5. Add per-step logs and artifacts. **Complete.**
 
 ### Exit Criteria
 
-- User can build a two-step workflow without writing shell script glue.
-- Workflow runs are persisted and debuggable.
+- User can build a two-step workflow without writing shell script glue. **Complete.**
+- Workflow runs are persisted and debuggable. **Complete.**
 
 ## Phase 9: Security And Trust Hardening
 

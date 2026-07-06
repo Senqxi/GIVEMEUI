@@ -27,6 +27,7 @@ import { exportSchemaJson, importSchemaJson, schemaExportFilename } from "./lib/
 import {
   appendPreset,
   appendRun,
+  appendWorkflowRun,
   createStorageId,
   isExecutableTrusted,
   loadWorkspace,
@@ -34,12 +35,25 @@ import {
   redactSecretValues,
   trustExecutable,
   upsertManifest,
+  upsertWorkflow,
   type SavedPreset,
   type StoredRun,
   type WorkspaceState
 } from "./lib/storage";
 import { confidenceLevel, type CommandSpec, type FieldKind, type FieldSpec, type FieldUiHints, type RunEvent, type ToolManifest } from "./lib/schema";
 import { isReviewField, validateToolManifest, type SchemaValidationResult } from "./lib/schemaValidation";
+import {
+  firstArtifactToken,
+  resolveWorkflowRunRequest,
+  resolveWorkflowValues,
+  workflowContextFromStepRun,
+  workflowStatusFromStepRuns,
+  type SavedWorkflow,
+  type StoredWorkflowRun,
+  type WorkflowStep,
+  type WorkflowStepRun,
+  type WorkflowStepStatus
+} from "./lib/workflows";
 
 type ConsoleLine = {
   id: string;
@@ -92,6 +106,11 @@ type FieldDraft = {
   advanced: boolean;
 };
 
+type WorkflowRunState = {
+  running: boolean;
+  stepRuns: WorkflowStepRun[];
+};
+
 const FIELD_KINDS: FieldKind[] = ["string", "number", "boolean", "enum", "file", "directory", "multi-file", "secret", "array", "raw"];
 const MAX_VISIBLE_FIELDS = 18;
 const DEFAULT_RUN_SETTINGS: RunSettings = {
@@ -131,6 +150,8 @@ export function App() {
   const [schemaSuggestionStatus, setSchemaSuggestionStatus] = useState<string>("");
   const [aiExplanation, setAiExplanation] = useState<AiCompletion | null>(null);
   const [aiExplaining, setAiExplaining] = useState(false);
+  const [selectedWorkflowId, setSelectedWorkflowId] = useState<string>("");
+  const [workflowRunState, setWorkflowRunState] = useState<WorkflowRunState>({ running: false, stepRuns: [] });
   const abortRef = useRef<AbortController | null>(null);
   const runCaptureRef = useRef<RunCapture | null>(null);
   const schemaFileInputRef = useRef<HTMLInputElement | null>(null);
@@ -152,6 +173,9 @@ export function App() {
   const commandPresets = useMemo(() => {
     return workspaceState.presets.filter((preset) => preset.toolId === manifest.id && preset.commandId === selectedCommand.id);
   }, [manifest.id, selectedCommand.id, workspaceState.presets]);
+  const selectedWorkflow = useMemo(() => {
+    return workspaceState.workflows.find((workflow) => workflow.id === selectedWorkflowId) ?? workspaceState.workflows[0] ?? null;
+  }, [selectedWorkflowId, workspaceState.workflows]);
   const schemaValidation = useMemo(() => validateToolManifest(manifest), [manifest]);
   const executableTrusted = useMemo(() => isExecutableTrusted(workspaceState, manifest.executable), [manifest.executable, workspaceState]);
 
@@ -177,6 +201,11 @@ export function App() {
       return nextCommand.fields[0]?.id ?? null;
     });
   }, [manifest, selectedCommandId]);
+
+  useEffect(() => {
+    if (selectedWorkflowId && workspaceState.workflows.some((workflow) => workflow.id === selectedWorkflowId)) return;
+    setSelectedWorkflowId(workspaceState.workflows[0]?.id ?? "");
+  }, [selectedWorkflowId, workspaceState.workflows]);
 
   function commitWorkspace(updater: (current: WorkspaceState) => WorkspaceState) {
     setWorkspaceState((current) => {
@@ -392,9 +421,272 @@ export function App() {
     }
   }
 
+  function handleCreateWorkflow() {
+    const now = new Date().toISOString();
+    const workflow: SavedWorkflow = {
+      id: createStorageId("workflow"),
+      name: `Workflow ${workspaceState.workflows.length + 1}`,
+      steps: [],
+      createdAt: now,
+      updatedAt: now
+    };
+    commitWorkspace((current) => upsertWorkflow(current, workflow));
+    setSelectedWorkflowId(workflow.id);
+    setWorkflowRunState({ running: false, stepRuns: [] });
+    appendConsole("system", `Created workflow "${workflow.name}".`);
+  }
+
+  function handleAddCurrentStepToWorkflow() {
+    const now = new Date().toISOString();
+    const workflow =
+      selectedWorkflow ??
+      ({
+        id: createStorageId("workflow"),
+        name: "Local workflow",
+        steps: [],
+        createdAt: now,
+        updatedAt: now
+      } satisfies SavedWorkflow);
+    const step: WorkflowStep = {
+      id: createStorageId("step"),
+      name: `${manifest.name} ${selectedCommand.name}`,
+      toolId: manifest.id,
+      commandId: selectedCommand.id,
+      values: redactSecretValues(selectedCommand.fields, values),
+      runSettings: {
+        cwd: runSettings.cwd.trim() || undefined,
+        envText: runSettings.envText.trim() || undefined,
+        timeoutSeconds: runSettings.timeoutSeconds
+      }
+    };
+    const nextWorkflow: SavedWorkflow = {
+      ...workflow,
+      steps: [...workflow.steps, step],
+      updatedAt: now
+    };
+
+    commitWorkspace((current) => upsertWorkflow(current, nextWorkflow));
+    setSelectedWorkflowId(nextWorkflow.id);
+    setWorkflowRunState({ running: false, stepRuns: [] });
+    appendConsole("system", `Added step "${step.name}" to ${nextWorkflow.name}.`);
+  }
+
+  function handleRemoveWorkflowStep(stepId: string) {
+    if (!selectedWorkflow) return;
+    const nextWorkflow: SavedWorkflow = {
+      ...selectedWorkflow,
+      steps: selectedWorkflow.steps.filter((step) => step.id !== stepId),
+      updatedAt: new Date().toISOString()
+    };
+    commitWorkspace((current) => upsertWorkflow(current, nextWorkflow));
+    setWorkflowRunState({ running: false, stepRuns: [] });
+  }
+
+  async function handleRunWorkflow(mode: "all" | "next") {
+    if (!selectedWorkflow || workflowRunState.running) return;
+    if (selectedWorkflow.steps.length === 0) {
+      appendConsole("stderr", "Add at least one workflow step before running.");
+      return;
+    }
+
+    const existingStepRuns = mode === "next" ? workflowRunState.stepRuns : [];
+    const startIndex = mode === "next" ? existingStepRuns.length : 0;
+    const stepsToRun = selectedWorkflow.steps.slice(startIndex);
+    if (stepsToRun.length === 0) {
+      appendConsole("system", "Workflow has no remaining steps.");
+      return;
+    }
+
+    const controller = new AbortController();
+    abortRef.current = controller;
+    const startedAt = new Date().toISOString();
+    let stepRuns = [...existingStepRuns];
+    const contexts = stepRuns.map(workflowContextFromStepRun);
+    setWorkflowRunState({ running: true, stepRuns });
+    appendConsole("system", `Running workflow "${selectedWorkflow.name}" ${mode === "next" ? "one step" : "from the first step"}.`);
+
+    try {
+      for (const step of stepsToRun) {
+        const stepRun = await runWorkflowStep(selectedWorkflow, step, contexts, controller.signal);
+        stepRuns = [...stepRuns.filter((current) => current.stepId !== step.id), stepRun];
+        contexts.push(workflowContextFromStepRun(stepRun));
+
+        if (stepRun.status !== "succeeded") break;
+      }
+    } finally {
+      const completedAt = new Date().toISOString();
+      const status = workflowStatusFromStepRuns(stepRuns);
+      setWorkflowRunState({ running: false, stepRuns });
+      abortRef.current = null;
+      commitWorkspace((current) =>
+        appendWorkflowRun(current, {
+          id: createStorageId("workflow-run"),
+          workflowId: selectedWorkflow.id,
+          workflowName: selectedWorkflow.name,
+          status,
+          stepRuns,
+          startedAt,
+          completedAt
+        })
+      );
+      appendConsole("system", `Workflow "${selectedWorkflow.name}" ${status}.`);
+    }
+  }
+
+  async function runWorkflowStep(
+    workflow: SavedWorkflow,
+    step: WorkflowStep,
+    contexts: ReturnType<typeof workflowContextFromStepRun>[],
+    signal: AbortSignal
+  ): Promise<WorkflowStepRun> {
+    const stepManifest = workspaceState.manifests.find((tool) => tool.id === step.toolId);
+    const stepCommand = stepManifest?.commands.find((command) => command.id === step.commandId);
+    const startedAt = new Date().toISOString();
+    const startedMs = Date.now();
+
+    if (!stepManifest || !stepCommand) {
+      return createFailedWorkflowStepRun(step, "Workflow step references a tool or command that no longer exists.", startedAt, startedMs);
+    }
+
+    if (!isExecutableTrusted(workspaceState, stepManifest.executable)) {
+      return createFailedWorkflowStepRun(step, `Trust ${stepManifest.executable} before running workflow step "${step.name}".`, startedAt, startedMs);
+    }
+
+    let env: Record<string, string> | undefined;
+    try {
+      env = parseEnvText(step.runSettings?.envText ?? "");
+    } catch (error) {
+      return createFailedWorkflowStepRun(step, error instanceof Error ? error.message : "Invalid workflow step environment.", startedAt, startedMs);
+    }
+
+    const resolvedValues = resolveWorkflowValues(step.values, contexts);
+    const redactedValues = resolveWorkflowValues(redactSecretValues(stepCommand.fields, step.values, "[redacted]"), contexts);
+    const runOptions = {
+      cwd: step.runSettings?.cwd?.trim() || undefined,
+      env,
+      timeoutMs: timeoutMsFromSeconds(step.runSettings?.timeoutSeconds ?? DEFAULT_RUN_SETTINGS.timeoutSeconds)
+    };
+    const request = resolveWorkflowRunRequest(buildRunRequest(stepManifest, stepCommand, resolvedValues, runOptions), contexts);
+    const redactedRequest = resolveWorkflowRunRequest(buildRunRequest(stepManifest, stepCommand, redactedValues, runOptions), contexts);
+    const actualCommand = [request.executable, ...request.baseArgs, ...request.args];
+    const redactedCommand = [redactedRequest.executable, ...redactedRequest.baseArgs, ...redactedRequest.args];
+    let stdout = "";
+    let stderr = "";
+    let exitCode: number | null = null;
+    let signalName: string | null = null;
+    let timedOut = false;
+    let durationMs = 0;
+
+    upsertLiveWorkflowStep({
+      stepId: step.id,
+      stepName: step.name,
+      command: redactedCommand,
+      preview: formatCommand(redactedCommand),
+      status: "running",
+      exitCode: null,
+      durationMs: 0,
+      stdout,
+      stderr,
+      startedAt,
+      completedAt: startedAt
+    });
+
+    appendConsole("system", `Workflow ${workflow.name}: running ${step.name}`);
+
+    try {
+      await runCommandStream(
+        request,
+        (event) => {
+          if (event.type === "stdout") {
+            stdout += event.chunk;
+            updateLiveWorkflowStepOutput(step.id, stdout, stderr);
+            return;
+          }
+          if (event.type === "stderr") {
+            stderr += event.chunk;
+            updateLiveWorkflowStepOutput(step.id, stdout, stderr);
+            return;
+          }
+          if (event.type === "error") {
+            stderr += event.message;
+            updateLiveWorkflowStepOutput(step.id, stdout, stderr);
+            return;
+          }
+          if (event.type === "exit") {
+            exitCode = event.exitCode;
+            signalName = event.signal;
+            timedOut = event.timedOut === true;
+            durationMs = event.durationMs;
+          }
+        },
+        signal
+      );
+    } catch (error) {
+      stderr += signal.aborted ? "Workflow canceled by user." : error instanceof Error ? error.message : "Workflow step failed.";
+      durationMs = Date.now() - startedMs;
+    }
+
+    const outputAnalysis = analyzeRunOutput(stdout, stderr);
+    const status: WorkflowStepStatus = exitCode === 0 && !timedOut && !stderr.includes("Workflow canceled by user.") ? "succeeded" : "failed";
+    const completedAt = new Date().toISOString();
+    const stepRun: WorkflowStepRun = {
+      stepId: step.id,
+      stepName: step.name,
+      command: redactedCommand,
+      preview: formatCommand(redactedCommand),
+      status,
+      exitCode,
+      signal: signalName,
+      durationMs,
+      timedOut,
+      outputAnalysis,
+      stdout,
+      stderr,
+      startedAt,
+      completedAt
+    };
+    upsertLiveWorkflowStep(stepRun);
+    return stepRun;
+  }
+
+  function createFailedWorkflowStepRun(step: WorkflowStep, message: string, startedAt: string, startedMs: number): WorkflowStepRun {
+    const completedAt = new Date().toISOString();
+    const stepRun: WorkflowStepRun = {
+      stepId: step.id,
+      stepName: step.name,
+      command: [],
+      preview: "",
+      status: "failed",
+      exitCode: null,
+      durationMs: Date.now() - startedMs,
+      stderr: message,
+      stdout: "",
+      startedAt,
+      completedAt
+    };
+    upsertLiveWorkflowStep(stepRun);
+    appendConsole("stderr", message);
+    return stepRun;
+  }
+
+  function upsertLiveWorkflowStep(stepRun: WorkflowStepRun) {
+    setWorkflowRunState((current) => ({
+      ...current,
+      stepRuns: [...current.stepRuns.filter((step) => step.stepId !== stepRun.stepId), stepRun]
+    }));
+  }
+
+  function updateLiveWorkflowStepOutput(stepId: string, stdout: string, stderr: string) {
+    setWorkflowRunState((current) => ({
+      ...current,
+      stepRuns: current.stepRuns.map((step) => (step.stepId === stepId ? { ...step, stdout, stderr } : step))
+    }));
+  }
+
   function handleCancel() {
     abortRef.current?.abort();
     setRunState((state) => ({ ...state, running: false }));
+    setWorkflowRunState((state) => ({ ...state, running: false }));
   }
 
   function handleTrustExecutable() {
@@ -738,6 +1030,22 @@ export function App() {
             />
           </aside>
         </div>
+        <WorkflowBuilderPanel
+          workflows={workspaceState.workflows}
+          workflowRuns={workspaceState.workflowRuns}
+          selectedWorkflow={selectedWorkflow}
+          liveRunState={workflowRunState}
+          manifests={workspaceState.manifests}
+          onAddCurrentStep={handleAddCurrentStepToWorkflow}
+          onCreateWorkflow={handleCreateWorkflow}
+          onRemoveStep={handleRemoveWorkflowStep}
+          onRunAll={() => void handleRunWorkflow("all")}
+          onRunNext={() => void handleRunWorkflow("next")}
+          onSelectWorkflow={(workflowId) => {
+            setSelectedWorkflowId(workflowId);
+            setWorkflowRunState({ running: false, stepRuns: [] });
+          }}
+        />
         <OutputConsole
           activeTab={activeConsoleTab}
           aiExplanation={aiExplanation}
@@ -1192,6 +1500,165 @@ function CommandPreview({
       </div>
     </section>
   );
+}
+
+function WorkflowBuilderPanel({
+  workflows,
+  workflowRuns,
+  selectedWorkflow,
+  liveRunState,
+  manifests,
+  onAddCurrentStep,
+  onCreateWorkflow,
+  onRemoveStep,
+  onRunAll,
+  onRunNext,
+  onSelectWorkflow
+}: {
+  workflows: SavedWorkflow[];
+  workflowRuns: StoredWorkflowRun[];
+  selectedWorkflow: SavedWorkflow | null;
+  liveRunState: WorkflowRunState;
+  manifests: ToolManifest[];
+  onAddCurrentStep: () => void;
+  onCreateWorkflow: () => void;
+  onRemoveStep: (stepId: string) => void;
+  onRunAll: () => void;
+  onRunNext: () => void;
+  onSelectWorkflow: (workflowId: string) => void;
+}) {
+  const latestStoredRun = selectedWorkflow ? workflowRuns.find((run) => run.workflowId === selectedWorkflow.id) : undefined;
+  const displayStepRuns = liveRunState.stepRuns.length > 0 ? liveRunState.stepRuns : latestStoredRun?.stepRuns ?? [];
+  const completedCount = displayStepRuns.filter((run) => run.status === "succeeded").length;
+  const nextStep = selectedWorkflow?.steps[completedCount];
+
+  return (
+    <section className="workflow-panel" data-testid="workflow-builder">
+      <PanelHeader
+        icon={<History size={17} />}
+        title="Workflow Builder"
+        subtitle="Sequential local command chains"
+        action={
+          <div className="workflow-actions">
+            <select
+              className="command-select"
+              aria-label="Workflow"
+              value={selectedWorkflow?.id ?? ""}
+              onChange={(event) => onSelectWorkflow(event.target.value)}
+            >
+              {workflows.length === 0 ? <option value="">No workflows</option> : null}
+              {workflows.map((workflow) => (
+                <option value={workflow.id} key={workflow.id}>
+                  {workflow.name}
+                </option>
+              ))}
+            </select>
+            <button className="mini-button" data-testid="new-workflow" onClick={onCreateWorkflow}>
+              New
+            </button>
+            <button className="mini-button" data-testid="add-workflow-step" onClick={onAddCurrentStep}>
+              Add Current Command
+            </button>
+            <button className="secondary-button compact-button" data-testid="run-next-workflow-step" onClick={onRunNext} disabled={!selectedWorkflow || liveRunState.running}>
+              Run Next
+            </button>
+            <button className="primary-button compact-button" data-testid="run-workflow" onClick={onRunAll} disabled={!selectedWorkflow || liveRunState.running}>
+              <Play size={15} />
+              Run All
+            </button>
+          </div>
+        }
+      />
+      {!selectedWorkflow ? (
+        <div className="workflow-empty">
+          <Terminal size={22} />
+          <strong>No workflow selected</strong>
+          <span>Add the current command to start a local workflow.</span>
+        </div>
+      ) : (
+        <div className="workflow-grid">
+          <div className="workflow-steps">
+            <div className="workflow-section-header">
+              <strong>{selectedWorkflow.name}</strong>
+              <small>{selectedWorkflow.steps.length} step{selectedWorkflow.steps.length === 1 ? "" : "s"}</small>
+            </div>
+            {selectedWorkflow.steps.length === 0 ? (
+              <div className="workflow-empty compact">
+                <span>Use Add Current Command to capture the active tool, command, values, and run settings.</span>
+              </div>
+            ) : null}
+            {selectedWorkflow.steps.map((step, index) => {
+              const stepManifest = manifests.find((tool) => tool.id === step.toolId);
+              const stepCommand = stepManifest?.commands.find((command) => command.id === step.commandId);
+              const stepRun = displayStepRuns.find((run) => run.stepId === step.id);
+              const status = stepRun?.status ?? (nextStep?.id === step.id ? "pending" : index < completedCount ? "succeeded" : "pending");
+              return (
+                <article className="workflow-step" key={step.id}>
+                  <div className="workflow-step-main">
+                    <span className="workflow-step-index">{index + 1}</span>
+                    <div>
+                      <strong>{step.name}</strong>
+                      <small>
+                        {stepManifest?.name ?? "Missing tool"} / {stepCommand?.name ?? "missing command"}
+                      </small>
+                      <code>{firstArtifactToken(step.id)}</code>
+                    </div>
+                  </div>
+                  <div className="workflow-step-side">
+                    <WorkflowStatusPill status={status} />
+                    <button className="mini-button" onClick={() => onRemoveStep(step.id)} disabled={liveRunState.running}>
+                      Remove
+                    </button>
+                  </div>
+                </article>
+              );
+            })}
+          </div>
+          <div className="workflow-run-log">
+            <div className="workflow-section-header">
+              <strong>Step Logs And Artifacts</strong>
+              <small>{latestStoredRun ? `Last saved run: ${latestStoredRun.status}` : "No saved workflow runs yet"}</small>
+            </div>
+            {displayStepRuns.length === 0 ? (
+              <div className="workflow-empty compact">
+                <span>Run a step to capture per-step stdout, stderr, and artifact paths.</span>
+              </div>
+            ) : null}
+            {displayStepRuns.map((stepRun) => (
+              <details className="workflow-run-step" key={stepRun.stepId} open={stepRun.status === "failed" || stepRun.status === "running"}>
+                <summary>
+                  <span>
+                    <strong>{stepRun.stepName}</strong>
+                    <small>{stepRun.durationMs}ms · exit {stepRun.exitCode ?? "n/a"}</small>
+                  </span>
+                  <WorkflowStatusPill status={stepRun.status} />
+                </summary>
+                {stepRun.preview ? <pre>{stepRun.preview}</pre> : null}
+                {stepRun.outputAnalysis?.artifacts.length ? (
+                  <div className="workflow-artifacts">
+                    {stepRun.outputAnalysis.artifacts.map((artifact) => (
+                      <code key={`${stepRun.stepId}-${artifact.path}`}>{artifact.path}</code>
+                    ))}
+                  </div>
+                ) : null}
+                {stepRun.stdout ? (
+                  <pre className="workflow-stream stdout">{stepRun.stdout}</pre>
+                ) : null}
+                {stepRun.stderr ? (
+                  <pre className="workflow-stream stderr">{stepRun.stderr}</pre>
+                ) : null}
+              </details>
+            ))}
+          </div>
+        </div>
+      )}
+    </section>
+  );
+}
+
+function WorkflowStatusPill({ status }: { status: WorkflowStepStatus }) {
+  const tone = status === "succeeded" ? "success" : status === "failed" ? "danger" : "warning";
+  return <span className={`workflow-status ${tone}`}>{status}</span>;
 }
 
 function SchemaSummary({

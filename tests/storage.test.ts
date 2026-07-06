@@ -1,5 +1,15 @@
 import { describe, expect, it } from "vitest";
-import { appendRun, createWorkspace, isExecutableTrusted, redactSecretValues, trustExecutable, upsertManifest, type StoredRun } from "../src/lib/storage";
+import {
+  appendRun,
+  appendWorkflowRun,
+  createWorkspace,
+  isExecutableTrusted,
+  redactSecretValues,
+  trustExecutable,
+  upsertManifest,
+  upsertWorkflow,
+  type StoredRun
+} from "../src/lib/storage";
 import { sampleManifest } from "../src/lib/sampleData";
 import type { CommandSpec, ToolManifest } from "../src/lib/schema";
 
@@ -72,6 +82,42 @@ describe("workspace storage helpers", () => {
 
     expect(isExecutableTrusted(next, sampleManifest.executable)).toBe(true);
     expect(next.trustedExecutables).toHaveLength(1);
+  });
+
+  it("persists workflows and trims workflow run history", () => {
+    let workspace = createWorkspace(sampleManifest);
+    workspace = upsertWorkflow(workspace, {
+      id: "workflow-1",
+      name: "Demo Workflow",
+      steps: [
+        {
+          id: "step-1",
+          name: "Python help",
+          toolId: sampleManifest.id,
+          commandId: sampleManifest.commands[0].id,
+          values: {}
+        }
+      ],
+      createdAt: "2026-07-05T00:00:00.000Z",
+      updatedAt: "2026-07-05T00:00:00.000Z"
+    });
+
+    for (let index = 0; index < 90; index += 1) {
+      workspace = appendWorkflowRun(workspace, {
+        id: `workflow-run-${index}`,
+        workflowId: "workflow-1",
+        workflowName: "Demo Workflow",
+        status: "succeeded",
+        stepRuns: [],
+        startedAt: "2026-07-05T00:00:00.000Z",
+        completedAt: "2026-07-05T00:00:00.012Z"
+      });
+    }
+
+    expect(workspace.workflows).toHaveLength(1);
+    expect(workspace.workflowRuns).toHaveLength(80);
+    expect(workspace.workflowRuns[0].id).toBe("workflow-run-89");
+    expect(workspace.workflowRuns.at(-1)?.id).toBe("workflow-run-10");
   });
 });
 

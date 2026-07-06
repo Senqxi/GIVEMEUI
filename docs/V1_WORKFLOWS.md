@@ -111,7 +111,22 @@ Exit criteria:
 - Secret fields are redacted.
 - The product remains a local wrapper around user-provided tools, not a misuse guide.
 
-## Workflow 6: Install From GitHub
+## Workflow 6: Build A Local Workflow
+
+1. User configures a generated command and adds it as a workflow step.
+2. User configures a second command and adds it as the next workflow step.
+3. User can paste a previous-step token such as `{{steps.<step-id>.artifacts.first}}` into a later file/path field.
+4. User runs the next step or the full workflow.
+5. GIVEMEUI runs each step sequentially through the safe local runner.
+6. User inspects per-step status, command preview, stdout, stderr, and artifacts.
+
+Exit criteria:
+
+- The user can chain commands without writing shell script glue.
+- Workflow steps remain transparent argument-array commands.
+- Workflow runs are persisted and debuggable.
+
+## Workflow 7: Install From GitHub
 
 1. User clones the repo.
 2. User installs dependencies.
