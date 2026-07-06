@@ -1,5 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { resolveWorkflowRunRequest, resolveWorkflowValues, workflowContextFromStepRun, workflowStatusFromStepRuns, type WorkflowStepRun } from "../src/lib/workflows";
+import {
+  duplicateWorkflowPreset,
+  firstArtifactToken,
+  resolveWorkflowRunRequest,
+  resolveWorkflowValues,
+  workflowContextFromStepRun,
+  workflowStatusFromStepRuns,
+  type WorkflowStepRun
+} from "../src/lib/workflows";
 
 describe("workflow helpers", () => {
   it("resolves stdout, stderr, and artifact references in values", () => {
@@ -62,6 +70,46 @@ describe("workflow helpers", () => {
     expect(context.artifacts).toEqual(["/tmp/file.txt"]);
     expect(workflowStatusFromStepRuns([run])).toBe("succeeded");
     expect(workflowStatusFromStepRuns([run, createStepRun("step-2", "failed")])).toBe("failed");
+  });
+
+  it("duplicates workflow presets and rewrites internal step references", () => {
+    let counter = 0;
+    const duplicated = duplicateWorkflowPreset(
+      {
+        id: "workflow-original",
+        name: "Media Workflow",
+        steps: [
+          {
+            id: "step-a",
+            name: "Create file",
+            toolId: "tool-a",
+            commandId: "command-a",
+            values: { output: "out.mp4" }
+          },
+          {
+            id: "step-b",
+            name: "Use file",
+            toolId: "tool-b",
+            commandId: "command-b",
+            values: { input: firstArtifactToken("step-a") },
+            runSettings: { cwd: "{{steps.step-a.stdout}}", envText: "FILE={{steps.step-a.artifacts.first}}" }
+          }
+        ],
+        createdAt: "2026-07-05T00:00:00.000Z",
+        updatedAt: "2026-07-05T00:00:00.000Z"
+      },
+      {
+        idFor: (prefix) => `${prefix}-${++counter}`,
+        now: "2026-07-06T00:00:00.000Z"
+      }
+    );
+
+    expect(duplicated.id).toBe("workflow-1");
+    expect(duplicated.name).toBe("Media Workflow copy");
+    expect(duplicated.steps.map((step) => step.id)).toEqual(["step-2", "step-3"]);
+    expect(duplicated.steps[1].values.input).toBe(firstArtifactToken("step-2"));
+    expect(duplicated.steps[1].runSettings?.cwd).toBe("{{steps.step-2.stdout}}");
+    expect(duplicated.steps[1].runSettings?.envText).toBe("FILE={{steps.step-2.artifacts.first}}");
   });
 });
 

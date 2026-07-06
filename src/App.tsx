@@ -43,6 +43,7 @@ import {
 import { confidenceLevel, type CommandSpec, type FieldKind, type FieldSpec, type FieldUiHints, type RunEvent, type ToolManifest } from "./lib/schema";
 import { isReviewField, validateToolManifest, type SchemaValidationResult } from "./lib/schemaValidation";
 import {
+  duplicateWorkflowPreset,
   firstArtifactToken,
   resolveWorkflowRunRequest,
   resolveWorkflowValues,
@@ -480,6 +481,47 @@ export function App() {
     };
     commitWorkspace((current) => upsertWorkflow(current, nextWorkflow));
     setWorkflowRunState({ running: false, stepRuns: [] });
+  }
+
+  function handleRenameWorkflow(name: string) {
+    if (!selectedWorkflow) return;
+    const nextWorkflow: SavedWorkflow = {
+      ...selectedWorkflow,
+      name,
+      updatedAt: new Date().toISOString()
+    };
+    commitWorkspace((current) => upsertWorkflow(current, nextWorkflow));
+  }
+
+  function handleRenameWorkflowStep(stepId: string, name: string) {
+    if (!selectedWorkflow) return;
+    const nextWorkflow: SavedWorkflow = {
+      ...selectedWorkflow,
+      steps: selectedWorkflow.steps.map((step) => (step.id === stepId ? { ...step, name } : step)),
+      updatedAt: new Date().toISOString()
+    };
+    commitWorkspace((current) => upsertWorkflow(current, nextWorkflow));
+  }
+
+  function handleDuplicateWorkflowPreset() {
+    if (!selectedWorkflow) return;
+    const duplicated = duplicateWorkflowPreset(selectedWorkflow, {
+      idFor: createStorageId,
+      now: new Date().toISOString()
+    });
+    commitWorkspace((current) => upsertWorkflow(current, duplicated));
+    setSelectedWorkflowId(duplicated.id);
+    setWorkflowRunState({ running: false, stepRuns: [] });
+    appendConsole("system", `Saved workflow preset "${duplicated.name}".`);
+  }
+
+  async function handleCopyWorkflowToken(token: string) {
+    try {
+      await copyTextToClipboard(token);
+      appendConsole("system", `Copied workflow token ${token}.`);
+    } catch {
+      appendConsole("stderr", `Clipboard unavailable. Token: ${token}`);
+    }
   }
 
   async function handleRunWorkflow(mode: "all" | "next") {
@@ -1038,7 +1080,11 @@ export function App() {
           manifests={workspaceState.manifests}
           onAddCurrentStep={handleAddCurrentStepToWorkflow}
           onCreateWorkflow={handleCreateWorkflow}
+          onDuplicateWorkflow={handleDuplicateWorkflowPreset}
+          onCopyToken={(token) => void handleCopyWorkflowToken(token)}
           onRemoveStep={handleRemoveWorkflowStep}
+          onRenameStep={handleRenameWorkflowStep}
+          onRenameWorkflow={handleRenameWorkflow}
           onRunAll={() => void handleRunWorkflow("all")}
           onRunNext={() => void handleRunWorkflow("next")}
           onSelectWorkflow={(workflowId) => {
@@ -1510,7 +1556,11 @@ function WorkflowBuilderPanel({
   manifests,
   onAddCurrentStep,
   onCreateWorkflow,
+  onCopyToken,
+  onDuplicateWorkflow,
   onRemoveStep,
+  onRenameStep,
+  onRenameWorkflow,
   onRunAll,
   onRunNext,
   onSelectWorkflow
@@ -1522,7 +1572,11 @@ function WorkflowBuilderPanel({
   manifests: ToolManifest[];
   onAddCurrentStep: () => void;
   onCreateWorkflow: () => void;
+  onCopyToken: (token: string) => void;
+  onDuplicateWorkflow: () => void;
   onRemoveStep: (stepId: string) => void;
+  onRenameStep: (stepId: string, name: string) => void;
+  onRenameWorkflow: (name: string) => void;
   onRunAll: () => void;
   onRunNext: () => void;
   onSelectWorkflow: (workflowId: string) => void;
@@ -1556,6 +1610,9 @@ function WorkflowBuilderPanel({
             <button className="mini-button" data-testid="new-workflow" onClick={onCreateWorkflow}>
               New
             </button>
+            <button className="mini-button" data-testid="duplicate-workflow" onClick={onDuplicateWorkflow} disabled={!selectedWorkflow}>
+              Save As Preset
+            </button>
             <button className="mini-button" data-testid="add-workflow-step" onClick={onAddCurrentStep}>
               Add Current Command
             </button>
@@ -1579,7 +1636,12 @@ function WorkflowBuilderPanel({
         <div className="workflow-grid">
           <div className="workflow-steps">
             <div className="workflow-section-header">
-              <strong>{selectedWorkflow.name}</strong>
+              <input
+                aria-label="Workflow name"
+                className="workflow-name-input"
+                value={selectedWorkflow.name}
+                onChange={(event) => onRenameWorkflow(event.target.value)}
+              />
               <small>{selectedWorkflow.steps.length} step{selectedWorkflow.steps.length === 1 ? "" : "s"}</small>
             </div>
             {selectedWorkflow.steps.length === 0 ? (
@@ -1597,11 +1659,21 @@ function WorkflowBuilderPanel({
                   <div className="workflow-step-main">
                     <span className="workflow-step-index">{index + 1}</span>
                     <div>
-                      <strong>{step.name}</strong>
+                      <input
+                        aria-label={`Step ${index + 1} name`}
+                        className="workflow-step-name-input"
+                        value={step.name}
+                        onChange={(event) => onRenameStep(step.id, event.target.value)}
+                      />
                       <small>
                         {stepManifest?.name ?? "Missing tool"} / {stepCommand?.name ?? "missing command"}
                       </small>
-                      <code>{firstArtifactToken(step.id)}</code>
+                      <span className="workflow-token-row">
+                        <code>{firstArtifactToken(step.id)}</code>
+                        <button className="mini-button" onClick={() => onCopyToken(firstArtifactToken(step.id))}>
+                          Copy Token
+                        </button>
+                      </span>
                     </div>
                   </div>
                   <div className="workflow-step-side">
@@ -2480,6 +2552,29 @@ function downloadText(filename: string, text: string): void {
   anchor.download = filename;
   anchor.click();
   URL.revokeObjectURL(href);
+}
+
+async function copyTextToClipboard(text: string): Promise<void> {
+  if (navigator.clipboard?.writeText) {
+    await navigator.clipboard.writeText(text);
+    return;
+  }
+
+  const textArea = document.createElement("textarea");
+  textArea.value = text;
+  textArea.setAttribute("readonly", "true");
+  textArea.style.position = "fixed";
+  textArea.style.left = "-9999px";
+  document.body.appendChild(textArea);
+  textArea.select();
+
+  try {
+    if (!document.execCommand("copy")) {
+      throw new Error("Clipboard copy failed.");
+    }
+  } finally {
+    document.body.removeChild(textArea);
+  }
 }
 
 function openArtifact(artifact: OutputArtifact): void {

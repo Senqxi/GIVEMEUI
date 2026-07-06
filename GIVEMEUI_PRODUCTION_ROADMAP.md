@@ -572,7 +572,7 @@ Let users chain commands into repeatable workflows.
 
 - Sequential steps.
 - Use output file from one step as input to another.
-- Save workflow presets.
+- Save workflow presets. **Complete.**
 - Run step-by-step or full workflow.
 - Show status for each step.
 

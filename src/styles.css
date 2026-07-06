@@ -824,6 +824,38 @@ button:not(:disabled):hover {
   font-size: 13px;
 }
 
+.workflow-name-input,
+.workflow-step-name-input {
+  min-width: 0;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  outline: 0;
+  background: transparent;
+  color: var(--text);
+  font-weight: 800;
+}
+
+.workflow-name-input {
+  width: min(260px, 100%);
+  min-height: 30px;
+  padding: 0 7px;
+  font-size: 13px;
+}
+
+.workflow-step-name-input {
+  width: 100%;
+  min-height: 24px;
+  padding: 0;
+  font-size: 13px;
+}
+
+.workflow-name-input:focus,
+.workflow-step-name-input:focus {
+  border-color: var(--accent);
+  background: #ffffff;
+  box-shadow: 0 0 0 3px rgba(15, 143, 143, 0.13);
+}
+
 .workflow-section-header small {
   color: var(--muted);
   font-size: 12px;
@@ -897,6 +929,14 @@ button:not(:disabled):hover {
   font-size: 11px;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.workflow-token-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+  min-width: 0;
 }
 
 .workflow-step-index {

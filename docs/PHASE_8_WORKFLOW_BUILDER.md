@@ -10,9 +10,12 @@ Workflows are still command-schema driven. Each step resolves to an executable p
 - Local persistence for workflows and workflow run history.
 - Workflow Builder panel in the local UI.
 - Add the current generated command as a workflow step.
+- Rename workflows and workflow steps inline.
+- Duplicate an existing workflow as a reusable preset.
 - Run all workflow steps from the beginning.
 - Run the next pending workflow step.
 - Variable references between steps.
+- Copy previous-step artifact tokens from the workflow editor.
 - Per-step stdout, stderr, status, timing, command preview, and detected artifacts.
 
 ## Workflow Schema
@@ -53,6 +56,12 @@ The UI shows a first-artifact token for each step. Users can paste that token in
 
 References are resolved immediately before a step runs. Missing references resolve to an empty string so the final command preview remains explicit and debuggable.
 
+## Workflow Presets
+
+Saved workflows act as reusable workflow presets. Users can duplicate a workflow with **Save As Preset** before changing names, steps, or field values for a variation.
+
+When a workflow preset is duplicated, GIVEMEUI generates new step ids and rewrites internal `{{steps...}}` references so copied workflows remain self-contained.
+
 ## Safety Behavior
 
 - Workflows run locally only.
@@ -66,6 +75,7 @@ References are resolved immediately before a step runs. Missing references resol
 
 - User can build a two-step workflow without writing shell script glue: complete.
 - Workflow runs are persisted and debuggable: complete.
+- Workflow presets can be saved and reused: complete.
 
 ## Next Hardening Steps
 

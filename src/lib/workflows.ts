@@ -106,6 +106,47 @@ export function firstArtifactToken(stepId: string): string {
   return `{{steps.${stepId}.artifacts.first}}`;
 }
 
+export function duplicateWorkflowPreset(workflow: SavedWorkflow, options: { idFor: (prefix: string) => string; now: string }): SavedWorkflow {
+  const workflowId = options.idFor("workflow");
+  const stepIdMap = new Map(workflow.steps.map((step) => [step.id, options.idFor("step")]));
+
+  return {
+    id: workflowId,
+    name: `${workflow.name} copy`,
+    steps: workflow.steps.map((step) => ({
+      ...step,
+      id: stepIdMap.get(step.id) as string,
+      values: rewriteWorkflowValueReferences(step.values, stepIdMap),
+      runSettings: step.runSettings
+        ? {
+            ...step.runSettings,
+            cwd: step.runSettings.cwd ? rewriteWorkflowStringReferences(step.runSettings.cwd, stepIdMap) : undefined,
+            envText: step.runSettings.envText ? rewriteWorkflowStringReferences(step.runSettings.envText, stepIdMap) : undefined
+          }
+        : undefined
+    })),
+    createdAt: options.now,
+    updatedAt: options.now
+  };
+}
+
+export function rewriteWorkflowValueReferences(values: FieldValues, stepIdMap: Map<string, string>): FieldValues {
+  return Object.fromEntries(
+    Object.entries(values).map(([fieldId, value]) => {
+      if (Array.isArray(value)) return [fieldId, value.map((item) => rewriteWorkflowStringReferences(item, stepIdMap))];
+      if (typeof value === "string") return [fieldId, rewriteWorkflowStringReferences(value, stepIdMap)];
+      return [fieldId, value];
+    })
+  );
+}
+
+export function rewriteWorkflowStringReferences(value: string, stepIdMap: Map<string, string>): string {
+  return value.replace(VARIABLE_PATTERN, (match, stepId: string) => {
+    const replacementStepId = stepIdMap.get(stepId);
+    return replacementStepId ? match.replace(`steps.${stepId}.`, `steps.${replacementStepId}.`) : match;
+  });
+}
+
 function resolveWorkflowString(value: string, contextByStepId: Map<string, WorkflowStepResultContext>): string {
   return value.replace(VARIABLE_PATTERN, (_match, stepId: string, selector: string, artifactIndex: string | undefined) => {
     const context = contextByStepId.get(stepId);

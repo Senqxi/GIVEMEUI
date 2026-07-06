@@ -24,6 +24,7 @@ This project follows the spirit of semantic versioning while it is pre-1.0: mino
 - Phase 6 optional local AI layer with provider settings, Ollama/LM Studio/OpenAI-compatible detection, output explanations, and reviewable schema suggestions.
 - Phase 7 tool adapter layer with registry support and initial adapters for FFmpeg, yt-dlp, and Git.
 - Phase 8 workflow builder with saved sequential workflows, previous-step variable references, step-by-step/full workflow runs, and per-step logs/artifacts.
+- Workflow builder tightening with inline workflow/step renaming, reusable workflow preset duplication, and copyable previous-step artifact tokens.
 
 ### Security
 
