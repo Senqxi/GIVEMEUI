@@ -21,9 +21,11 @@ ffmpeg --help
 3. GIVEMEUI resolves the executable from an absolute path, project-local path, or `$PATH`.
 4. GIVEMEUI captures help output with a timeout.
 5. GIVEMEUI generates a first-pass `ToolManifest`.
-6. User sees:
+6. If a built-in adapter matches the tool, GIVEMEUI improves metadata without executing anything.
+7. User sees:
    - tool name
    - executable
+   - applied adapter
    - raw captured help
    - generated fields
    - parser confidence
@@ -34,6 +36,7 @@ Exit criteria:
 - Discovery does not require cloud AI.
 - Failed discovery gives a useful local error.
 - Raw help is preserved for auditability.
+- Adapter-enhanced schemas remain reviewable and exportable.
 
 ## Workflow 2: Review And Correct The Schema
 

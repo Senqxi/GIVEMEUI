@@ -16,6 +16,7 @@ This alpha slice focuses on deterministic behavior:
 - Stream stdout/stderr into the UI.
 - Show deterministic output insights for JSON, tables, diagnostics, progress, and file artifacts.
 - Optionally connect to local AI providers for reviewable schema suggestions and output explanations.
+- Apply built-in adapters for popular tools such as FFmpeg, yt-dlp, and Git.
 - Edit generated field labels, descriptions, types, groups, required state, choices, and UI hints.
 - Persist tool schemas, trusted executables, presets, and run history locally.
 - Import/export command schemas as JSON.
@@ -118,6 +119,7 @@ npm run pack:check
 - Phase 4 safe runner: [docs/PHASE_4_SAFE_RUNNER.md](./docs/PHASE_4_SAFE_RUNNER.md)
 - Phase 5 output understanding: [docs/PHASE_5_OUTPUT_UNDERSTANDING.md](./docs/PHASE_5_OUTPUT_UNDERSTANDING.md)
 - Phase 6 local AI: [docs/PHASE_6_LOCAL_AI.md](./docs/PHASE_6_LOCAL_AI.md)
+- Phase 7 tool adapters: [docs/PHASE_7_TOOL_ADAPTERS.md](./docs/PHASE_7_TOOL_ADAPTERS.md)
 - V1 workflows: [docs/V1_WORKFLOWS.md](./docs/V1_WORKFLOWS.md)
 - Threat model: [docs/THREAT_MODEL.md](./docs/THREAT_MODEL.md)
 - Release process: [docs/RELEASE.md](./docs/RELEASE.md)

@@ -521,6 +521,8 @@ Add optional AI while keeping the product functional without it.
 
 ## Phase 7: Tool Adapters
 
+Status: complete for the current local CLI alpha. See `docs/PHASE_7_TOOL_ADAPTERS.md`.
+
 ### Objectives
 
 Improve quality for popular tools with dedicated adapters.

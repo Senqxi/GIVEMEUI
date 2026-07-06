@@ -22,6 +22,7 @@ This project follows the spirit of semantic versioning while it is pre-1.0: mino
 - Phase 4 safe command runner with executable trust, working directory controls, environment overrides, bounded timeouts, cancellation, and richer run history.
 - Phase 5 deterministic output understanding with JSON, NDJSON, CSV/TSV, diagnostics, progress, artifact detection, and output copy/download controls.
 - Phase 6 optional local AI layer with provider settings, Ollama/LM Studio/OpenAI-compatible detection, output explanations, and reviewable schema suggestions.
+- Phase 7 tool adapter layer with registry support and initial adapters for FFmpeg, yt-dlp, and Git.
 
 ### Security
 
@@ -33,6 +34,7 @@ This project follows the spirit of semantic versioning while it is pre-1.0: mino
 - Newly discovered or imported executables must be explicitly trusted before local execution.
 - Run history stores environment key names only, not environment values.
 - AI suggestions never execute commands and must be reviewed before changing schemas.
+- Tool adapters improve metadata only; command execution still requires preview and executable trust.
 
 ## [0.1.0] - TBD
 

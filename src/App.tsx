@@ -1198,6 +1198,7 @@ function SchemaSummary({
 
 function ToolDiscoveryPanel({ manifest }: { manifest: ToolManifest }) {
   const discovery = manifest.discovery;
+  const adapterLabels = manifest.adapters?.map((adapter) => adapter.name).join(", ");
 
   if (!discovery) {
     return (
@@ -1206,6 +1207,12 @@ function ToolDiscoveryPanel({ manifest }: { manifest: ToolManifest }) {
           <span>Executable</span>
           <code>{manifest.executable}</code>
         </div>
+        {adapterLabels ? (
+          <div className="metadata-row">
+            <span>Adapter</span>
+            <code>{adapterLabels}</code>
+          </div>
+        ) : null}
       </section>
     );
   }
@@ -1234,6 +1241,12 @@ function ToolDiscoveryPanel({ manifest }: { manifest: ToolManifest }) {
         <span>Attempts</span>
         <code>{discovery.helpAttempts.length}</code>
       </div>
+      {adapterLabels ? (
+        <div className="metadata-row">
+          <span>Adapter</span>
+          <code>{adapterLabels}</code>
+        </div>
+      ) : null}
       {discovery.warnings.length > 0 ? (
         <div className="metadata-warning">
           <AlertTriangle size={14} />

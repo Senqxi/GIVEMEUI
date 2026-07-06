@@ -49,7 +49,7 @@ export type CommandExample = {
 };
 
 export type OutputSpec = {
-  expectedTypes: Array<"text" | "json" | "csv" | "file" | "image" | "video">;
+  expectedTypes: Array<"text" | "json" | "csv" | "file" | "image" | "video" | "audio">;
 };
 
 export type SafetySpec = {
@@ -85,6 +85,14 @@ export type DiscoveryMetadata = {
   warnings: string[];
 };
 
+export type AdapterMetadata = {
+  id: string;
+  name: string;
+  version?: string;
+  appliedAt: string;
+  notes: string[];
+};
+
 export type CommandSpec = {
   id: string;
   name: string;
@@ -107,6 +115,7 @@ export type ToolManifest = {
   source: ToolSource;
   rawHelp?: string;
   discovery?: DiscoveryMetadata;
+  adapters?: AdapterMetadata[];
   commands: CommandSpec[];
   createdAt: string;
   updatedAt: string;

@@ -2,6 +2,7 @@ import { constants, accessSync, statSync } from "node:fs";
 import { delimiter, dirname, isAbsolute, join, resolve, sep } from "node:path";
 import { spawn } from "node:child_process";
 import { commandNameFromExecutable, parseCommandLine } from "../src/lib/commandLine";
+import { applyToolAdapters } from "../src/lib/adapters";
 import { helpCommandCandidates, parseHelpOutput } from "../src/lib/helpParser";
 import type { DiscoveryAttempt, DiscoveryMetadata, DiscoveryRequest, DiscoveryResponse, ExecutableResolution } from "../src/lib/schema";
 
@@ -57,12 +58,12 @@ export async function discoverCommand(request: DiscoveryRequest): Promise<Discov
     versionCommand: versionResult.command,
     warnings
   };
-  const manifest = parseHelpOutput(helpText || bestHelp.stderr || bestHelp.stdout, request.commandLine, {
+  const manifest = applyToolAdapters(parseHelpOutput(helpText || bestHelp.stderr || bestHelp.stdout, request.commandLine, {
     executable,
     baseArgs,
     version: versionResult.version,
     discovery: metadata
-  });
+  }));
 
   return {
     manifest,

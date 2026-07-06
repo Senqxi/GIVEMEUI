@@ -65,7 +65,8 @@ export function normalizeToolManifest(manifest: ToolManifest): ToolManifest {
         validation: field.validation ? { ...field.validation } : undefined,
         ui: field.ui ? { ...field.ui } : undefined
       }))
-    }))
+    })),
+    adapters: manifest.adapters ? manifest.adapters.map((adapter) => ({ ...adapter, notes: [...adapter.notes] })) : undefined
   };
 }
 
