@@ -1,5 +1,6 @@
 import type { ToolManifest } from "./schema";
 import { normalizeToolManifest, validateToolManifest, type SchemaValidationResult } from "./schemaValidation";
+import { adapterTrustKey, executablePinnedPath, schemaFingerprint } from "./security";
 
 export type SchemaImportResult = {
   manifest: ToolManifest;
@@ -7,7 +8,23 @@ export type SchemaImportResult = {
 };
 
 export function exportSchemaJson(manifest: ToolManifest): string {
-  return JSON.stringify(normalizeToolManifest(manifest), null, 2);
+  const normalized = normalizeToolManifest(manifest);
+  return JSON.stringify(
+    {
+      ...normalized,
+      provenance: {
+        exportedAt: new Date().toISOString(),
+        schemaFingerprint: schemaFingerprint(normalized),
+        generatedBy: "GIVEMEUI",
+        source: normalized.source,
+        executable: normalized.executable,
+        resolvedPath: executablePinnedPath(normalized),
+        adapters: normalized.adapters?.map(adapterTrustKey)
+      }
+    },
+    null,
+    2
+  );
 }
 
 export function schemaExportFilename(manifest: ToolManifest): string {

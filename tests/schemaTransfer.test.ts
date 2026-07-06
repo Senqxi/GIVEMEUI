@@ -12,9 +12,18 @@ describe("schema transfer", () => {
     );
 
     const exported = exportSchemaJson(manifest);
+    const parsed = JSON.parse(exported);
     const imported = importSchemaJson(exported, new Date("2026-07-05T00:00:00.000Z"));
 
     expect(schemaExportFilename(manifest)).toBe("git.givemeui.schema.json");
+    expect(parsed.provenance).toEqual(
+      expect.objectContaining({
+        generatedBy: "GIVEMEUI",
+        schemaFingerprint: expect.stringMatching(/^fnv1a-[a-f0-9]{8}$/),
+        executable: "git",
+        adapters: ["git@git version 2.45.0"]
+      })
+    );
     expect(imported.manifest.source).toBe("imported");
     expect(imported.manifest.updatedAt).toBe("2026-07-05T00:00:00.000Z");
     expect(imported.manifest.adapters).toEqual([

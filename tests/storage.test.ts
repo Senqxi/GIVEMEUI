@@ -1,11 +1,16 @@
 import { describe, expect, it } from "vitest";
 import {
+  appendAuditLog,
   appendRun,
   appendWorkflowRun,
+  areAdaptersTrusted,
   createWorkspace,
   isExecutableTrusted,
+  isSchemaTrusted,
   redactSecretValues,
+  trustAdapter,
   trustExecutable,
+  trustSchema,
   upsertManifest,
   upsertWorkflow,
   type StoredRun
@@ -72,16 +77,69 @@ describe("workspace storage helpers", () => {
     const workspace = createWorkspace(sampleManifest);
 
     expect(isExecutableTrusted(workspace, sampleManifest.executable)).toBe(false);
+    expect(
+      isExecutableTrusted(
+        trustExecutable(workspace, {
+          executable: sampleManifest.executable,
+          name: sampleManifest.name,
+          source: "user",
+          trustedAt: "2026-07-05T00:00:00.000Z"
+        }),
+        sampleManifest.executable,
+        "/usr/bin/python3"
+      )
+    ).toBe(false);
 
     const next = trustExecutable(workspace, {
       executable: sampleManifest.executable,
       name: sampleManifest.name,
       source: "user",
+      pinnedPath: "/usr/bin/python3",
       trustedAt: "2026-07-05T00:00:00.000Z"
     });
 
-    expect(isExecutableTrusted(next, sampleManifest.executable)).toBe(true);
+    expect(isExecutableTrusted(next, sampleManifest.executable, "/usr/bin/python3")).toBe(true);
+    expect(isExecutableTrusted(next, sampleManifest.executable, "/tmp/python3")).toBe(false);
     expect(next.trustedExecutables).toHaveLength(1);
+  });
+
+  it("tracks schema and adapter trust records independently", () => {
+    let workspace = createWorkspace(sampleManifest);
+
+    expect(isSchemaTrusted(workspace, "fnv1a-demo")).toBe(false);
+    workspace = trustSchema(workspace, {
+      fingerprint: "fnv1a-demo",
+      toolId: sampleManifest.id,
+      name: sampleManifest.name,
+      source: "imported",
+      trustedAt: "2026-07-05T00:00:00.000Z"
+    });
+    workspace = trustAdapter(workspace, {
+      id: "git",
+      name: "Git",
+      version: "git version 2.45.0",
+      trustedAt: "2026-07-05T00:00:00.000Z"
+    });
+
+    expect(isSchemaTrusted(workspace, "fnv1a-demo")).toBe(true);
+    expect(areAdaptersTrusted(workspace, [{ id: "git", name: "Git", version: "git version 2.45.0", appliedAt: "now", notes: [] }])).toBe(true);
+    expect(areAdaptersTrusted(workspace, [{ id: "git", name: "Git", version: "git version 2.46.0", appliedAt: "now", notes: [] }])).toBe(false);
+  });
+
+  it("keeps a bounded audit log", () => {
+    let workspace = createWorkspace(sampleManifest);
+
+    for (let index = 0; index < 250; index += 1) {
+      workspace = appendAuditLog(workspace, {
+        id: `audit-${index}`,
+        at: "2026-07-05T00:00:00.000Z",
+        action: "run.blocked",
+        reason: "test"
+      });
+    }
+
+    expect(workspace.auditLog).toHaveLength(240);
+    expect(workspace.auditLog[0].id).toBe("audit-249");
   });
 
   it("persists workflows and trims workflow run history", () => {

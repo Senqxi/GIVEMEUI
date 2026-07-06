@@ -10,6 +10,7 @@ const MAX_RUNS = 60;
 const MAX_PRESETS = 120;
 const MAX_WORKFLOWS = 80;
 const MAX_WORKFLOW_RUNS = 80;
+const MAX_AUDIT_LOG = 240;
 const TOOL_SOURCES: ToolSource[] = ["detected", "imported", "manual", "ai-enhanced"];
 const FIELD_KINDS: FieldKind[] = ["string", "number", "boolean", "enum", "file", "directory", "multi-file", "secret", "array", "raw"];
 const WORKFLOW_STEP_STATUSES: WorkflowStepStatus[] = ["pending", "running", "succeeded", "failed", "skipped"];
@@ -49,7 +50,47 @@ export type TrustedExecutable = {
   executable: string;
   name?: string;
   source: "user" | "imported";
+  pinnedPath?: string;
+  resolutionType?: "absolute" | "relative" | "path" | "unresolved";
   trustedAt: string;
+};
+
+export type TrustedSchema = {
+  fingerprint: string;
+  toolId: string;
+  name: string;
+  source: ToolSource;
+  trustedAt: string;
+};
+
+export type TrustedAdapter = {
+  id: string;
+  name: string;
+  version?: string;
+  trustedAt: string;
+};
+
+export type AuditLogEntry = {
+  id: string;
+  at: string;
+  action:
+    | "trust.executable"
+    | "trust.schema"
+    | "trust.adapter"
+    | "run.blocked"
+    | "run.started"
+    | "run.completed"
+    | "workflow.blocked"
+    | "workflow.started"
+    | "workflow.completed";
+  toolId?: string;
+  commandId?: string;
+  workflowId?: string;
+  executable?: string;
+  preview?: string;
+  outcome?: string;
+  reason?: string;
+  metadata?: Record<string, string | number | boolean | undefined>;
 };
 
 export type WorkspaceState = {
@@ -61,6 +102,9 @@ export type WorkspaceState = {
   workflows: SavedWorkflow[];
   workflowRuns: StoredWorkflowRun[];
   trustedExecutables: TrustedExecutable[];
+  trustedSchemas: TrustedSchema[];
+  trustedAdapters: TrustedAdapter[];
+  auditLog: AuditLogEntry[];
   aiSettings: AiSettings;
 };
 
@@ -82,6 +126,9 @@ export function loadWorkspace(fallbackManifest: ToolManifest): WorkspaceState {
       workflows: Array.isArray(parsed.workflows) ? parsed.workflows.filter(isSavedWorkflow).slice(0, MAX_WORKFLOWS) : [],
       workflowRuns: Array.isArray(parsed.workflowRuns) ? parsed.workflowRuns.filter(isStoredWorkflowRun).slice(0, MAX_WORKFLOW_RUNS) : [],
       trustedExecutables: Array.isArray(parsed.trustedExecutables) ? parsed.trustedExecutables.filter(isTrustedExecutable) : [],
+      trustedSchemas: Array.isArray(parsed.trustedSchemas) ? parsed.trustedSchemas.filter(isTrustedSchema) : [],
+      trustedAdapters: Array.isArray(parsed.trustedAdapters) ? parsed.trustedAdapters.filter(isTrustedAdapter) : [],
+      auditLog: Array.isArray(parsed.auditLog) ? parsed.auditLog.filter(isAuditLogEntry).slice(0, MAX_AUDIT_LOG) : [],
       aiSettings: normalizeAiSettings(parsed.aiSettings)
     };
 
@@ -115,6 +162,9 @@ export function createWorkspace(fallbackManifest: ToolManifest): WorkspaceState 
     workflows: [],
     workflowRuns: [],
     trustedExecutables: [],
+    trustedSchemas: [],
+    trustedAdapters: [],
+    auditLog: [],
     aiSettings: DEFAULT_AI_SETTINGS
   };
 }
@@ -168,15 +218,54 @@ export function appendWorkflowRun(state: WorkspaceState, run: StoredWorkflowRun)
   };
 }
 
-export function isExecutableTrusted(state: WorkspaceState, executable: string): boolean {
-  return state.trustedExecutables.some((item) => item.executable === executable);
+export function appendAuditLog(state: WorkspaceState, entry: AuditLogEntry): WorkspaceState {
+  return {
+    ...state,
+    auditLog: [entry, ...state.auditLog].slice(0, MAX_AUDIT_LOG)
+  };
+}
+
+export function isExecutableTrusted(state: WorkspaceState, executable: string, pinnedPath?: string): boolean {
+  return state.trustedExecutables.some((item) => {
+    if (item.executable !== executable) return false;
+    if (!pinnedPath) return true;
+    return item.pinnedPath === pinnedPath;
+  });
 }
 
 export function trustExecutable(state: WorkspaceState, executable: TrustedExecutable): WorkspaceState {
-  const existing = state.trustedExecutables.filter((item) => item.executable !== executable.executable);
+  const trusted = { ...executable, executable: executable.executable.trim(), pinnedPath: executable.pinnedPath?.trim() || undefined };
+  const existing = state.trustedExecutables.filter((item) => item.executable !== trusted.executable || item.pinnedPath !== trusted.pinnedPath);
   return {
     ...state,
-    trustedExecutables: [{ ...executable, executable: executable.executable.trim() }, ...existing]
+    trustedExecutables: [trusted, ...existing]
+  };
+}
+
+export function isSchemaTrusted(state: WorkspaceState, fingerprint: string): boolean {
+  return state.trustedSchemas.some((item) => item.fingerprint === fingerprint);
+}
+
+export function trustSchema(state: WorkspaceState, schema: TrustedSchema): WorkspaceState {
+  const existing = state.trustedSchemas.filter((item) => item.fingerprint !== schema.fingerprint);
+  return {
+    ...state,
+    trustedSchemas: [schema, ...existing]
+  };
+}
+
+export function areAdaptersTrusted(state: WorkspaceState, adapters: AdapterMetadata[] | undefined): boolean {
+  if (!adapters || adapters.length === 0) return true;
+  return adapters.every((adapter) =>
+    state.trustedAdapters.some((item) => item.id === adapter.id && (item.version ?? "") === (adapter.version ?? ""))
+  );
+}
+
+export function trustAdapter(state: WorkspaceState, adapter: TrustedAdapter): WorkspaceState {
+  const existing = state.trustedAdapters.filter((item) => item.id !== adapter.id || (item.version ?? "") !== (adapter.version ?? ""));
+  return {
+    ...state,
+    trustedAdapters: [adapter, ...existing]
   };
 }
 
@@ -352,7 +441,65 @@ function isTrustedExecutable(value: unknown): value is TrustedExecutable {
     trusted.executable.trim().length > 0 &&
     (trusted.name === undefined || typeof trusted.name === "string") &&
     (trusted.source === "user" || trusted.source === "imported") &&
+    (trusted.pinnedPath === undefined || typeof trusted.pinnedPath === "string") &&
+    (trusted.resolutionType === undefined ||
+      trusted.resolutionType === "absolute" ||
+      trusted.resolutionType === "relative" ||
+      trusted.resolutionType === "path" ||
+      trusted.resolutionType === "unresolved") &&
     typeof trusted.trustedAt === "string"
+  );
+}
+
+function isTrustedSchema(value: unknown): value is TrustedSchema {
+  if (!value || typeof value !== "object") return false;
+  const trusted = value as Partial<TrustedSchema>;
+  return (
+    typeof trusted.fingerprint === "string" &&
+    typeof trusted.toolId === "string" &&
+    typeof trusted.name === "string" &&
+    typeof trusted.source === "string" &&
+    TOOL_SOURCES.includes(trusted.source) &&
+    typeof trusted.trustedAt === "string"
+  );
+}
+
+function isTrustedAdapter(value: unknown): value is TrustedAdapter {
+  if (!value || typeof value !== "object") return false;
+  const trusted = value as Partial<TrustedAdapter>;
+  return (
+    typeof trusted.id === "string" &&
+    typeof trusted.name === "string" &&
+    (trusted.version === undefined || typeof trusted.version === "string") &&
+    typeof trusted.trustedAt === "string"
+  );
+}
+
+function isAuditLogEntry(value: unknown): value is AuditLogEntry {
+  if (!value || typeof value !== "object") return false;
+  const entry = value as Partial<AuditLogEntry>;
+  return (
+    typeof entry.id === "string" &&
+    typeof entry.at === "string" &&
+    typeof entry.action === "string" &&
+    [
+      "trust.executable",
+      "trust.schema",
+      "trust.adapter",
+      "run.blocked",
+      "run.started",
+      "run.completed",
+      "workflow.blocked",
+      "workflow.started",
+      "workflow.completed"
+    ].includes(entry.action) &&
+    (entry.toolId === undefined || typeof entry.toolId === "string") &&
+    (entry.commandId === undefined || typeof entry.commandId === "string") &&
+    (entry.workflowId === undefined || typeof entry.workflowId === "string") &&
+    (entry.executable === undefined || typeof entry.executable === "string") &&
+    (entry.preview === undefined || typeof entry.preview === "string") &&
+    (entry.outcome === undefined || typeof entry.outcome === "string") &&
+    (entry.reason === undefined || typeof entry.reason === "string")
   );
 }
 

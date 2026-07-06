@@ -25,6 +25,7 @@ This project follows the spirit of semantic versioning while it is pre-1.0: mino
 - Phase 7 tool adapter layer with registry support and initial adapters for FFmpeg, yt-dlp, and Git.
 - Phase 8 workflow builder with saved sequential workflows, previous-step variable references, step-by-step/full workflow runs, and per-step logs/artifacts.
 - Workflow builder tightening with inline workflow/step renaming, reusable workflow preset duplication, and copyable previous-step artifact tokens.
+- Phase 9 security and trust hardening with schema/adapter trust, executable path pinning, destructive warnings, shell gating, provenance metadata, and a local audit log.
 
 ### Security
 
@@ -34,6 +35,10 @@ This project follows the spirit of semantic versioning while it is pre-1.0: mino
 - Discovery records unresolved executable warnings and keeps generated schemas reviewable before execution.
 - Imported schemas are validated and normalized before entering the local workspace.
 - Newly discovered or imported executables must be explicitly trusted before local execution.
+- Imported schemas and adapter metadata require explicit trust before execution.
+- Shell-mode commands are gated, and destructive command previews require explicit review.
+- Schema exports include local provenance metadata and deterministic fingerprints.
+- Trust decisions and command execution events are recorded in a bounded local audit log.
 - Run history stores environment key names only, not environment values.
 - AI suggestions never execute commands and must be reviewed before changing schemas.
 - Tool adapters improve metadata only; command execution still requires preview and executable trust.

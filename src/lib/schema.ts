@@ -93,6 +93,16 @@ export type AdapterMetadata = {
   notes: string[];
 };
 
+export type SchemaProvenance = {
+  exportedAt?: string;
+  schemaFingerprint?: string;
+  generatedBy?: string;
+  source?: ToolSource;
+  executable?: string;
+  resolvedPath?: string;
+  adapters?: string[];
+};
+
 export type CommandSpec = {
   id: string;
   name: string;
@@ -116,6 +126,7 @@ export type ToolManifest = {
   rawHelp?: string;
   discovery?: DiscoveryMetadata;
   adapters?: AdapterMetadata[];
+  provenance?: SchemaProvenance;
   commands: CommandSpec[];
   createdAt: string;
   updatedAt: string;

@@ -609,23 +609,25 @@ Prepare for real users running real commands on local machines.
 ### Tasks
 
 1. Add trust model:
-   - Trusted executable.
-   - Trusted schema.
-   - Trusted adapter.
-2. Add clear command preview before run.
-3. Add destructive-command warnings.
-4. Add path pinning for executables.
-5. Add schema signature or provenance metadata.
-6. Add secret redaction.
-7. Add sandbox notes and OS limitations.
-8. Add audit log for command execution.
+   - Trusted executable. **Complete.**
+   - Trusted schema. **Complete.**
+   - Trusted adapter. **Complete.**
+2. Add clear command preview before run. **Complete.**
+3. Add destructive-command warnings. **Complete.**
+4. Add path pinning for executables. **Complete.**
+5. Add schema signature or provenance metadata. **Complete.**
+6. Add secret redaction. **Complete.**
+7. Add sandbox notes and OS limitations. **Complete.**
+8. Add audit log for command execution. **Complete.**
 
 ### Exit Criteria
 
-- New executable requires user trust.
-- Imported schema requires review.
-- Shell mode is explicitly gated.
-- Secret redaction has tests.
+- New executable requires user trust. **Complete.**
+- Imported schema requires review. **Complete.**
+- Shell mode is explicitly gated. **Complete.**
+- Secret redaction has tests. **Complete.**
+
+Status: complete for the current local CLI alpha. See `docs/PHASE_9_SECURITY_TRUST.md`.
 
 ## Phase 10: Persistence And Project Model
 

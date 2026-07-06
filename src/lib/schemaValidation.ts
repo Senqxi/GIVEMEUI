@@ -44,6 +44,7 @@ export function validateToolManifest(value: unknown): SchemaValidationResult {
   requireString(manifest.createdAt, "createdAt", errors);
   requireString(manifest.updatedAt, "updatedAt", errors);
   validateAdapters(manifest.adapters, errors);
+  validateProvenance(manifest.provenance, errors);
 
   return { valid: errors.length === 0, errors, warnings };
 }
@@ -67,7 +68,13 @@ export function normalizeToolManifest(manifest: ToolManifest): ToolManifest {
         ui: field.ui ? { ...field.ui } : undefined
       }))
     })),
-    adapters: manifest.adapters ? manifest.adapters.map((adapter) => ({ ...adapter, notes: [...adapter.notes] })) : undefined
+    adapters: manifest.adapters ? manifest.adapters.map((adapter) => ({ ...adapter, notes: [...adapter.notes] })) : undefined,
+    provenance: manifest.provenance
+      ? {
+          ...manifest.provenance,
+          adapters: manifest.provenance.adapters ? [...manifest.provenance.adapters] : undefined
+        }
+      : undefined
   };
 }
 
@@ -185,6 +192,24 @@ function validateAdapters(adapters: unknown, errors: string[]): void {
       errors.push(`adapters[${index}].notes must be an array of strings.`);
     }
   });
+}
+
+function validateProvenance(provenance: unknown, errors: string[]): void {
+  if (provenance === undefined) return;
+  if (!provenance || typeof provenance !== "object") {
+    errors.push("provenance must be an object when provided.");
+    return;
+  }
+
+  const metadata = provenance as Record<string, unknown>;
+  for (const key of ["exportedAt", "schemaFingerprint", "generatedBy", "source", "executable", "resolvedPath"]) {
+    if (metadata[key] !== undefined && typeof metadata[key] !== "string") {
+      errors.push(`provenance.${key} must be a string when provided.`);
+    }
+  }
+  if (metadata.adapters !== undefined && (!Array.isArray(metadata.adapters) || !metadata.adapters.every((item) => typeof item === "string"))) {
+    errors.push("provenance.adapters must be an array of strings when provided.");
+  }
 }
 
 function requireString(value: unknown, path: string, errors: string[]): void {

@@ -24,19 +24,26 @@ import { analyzeRunOutput, type OutputAnalysis, type OutputArtifact } from "./li
 import { parseEnvText, timeoutMsFromSeconds } from "./lib/runSettings";
 import { sampleManifest } from "./lib/sampleData";
 import { exportSchemaJson, importSchemaJson, schemaExportFilename } from "./lib/schemaTransfer";
+import { adapterTrustKey, commandRiskReviewKey, detectCommandRisk, executablePinnedPath, schemaFingerprint, type CommandRisk } from "./lib/security";
 import {
+  appendAuditLog,
   appendPreset,
   appendRun,
   appendWorkflowRun,
+  areAdaptersTrusted,
   createStorageId,
   isExecutableTrusted,
+  isSchemaTrusted,
   loadWorkspace,
   persistWorkspace,
   redactSecretValues,
+  trustAdapter,
   trustExecutable,
+  trustSchema,
   upsertManifest,
   upsertWorkflow,
   type SavedPreset,
+  type AuditLogEntry,
   type StoredRun,
   type WorkspaceState
 } from "./lib/storage";
@@ -63,7 +70,7 @@ type ConsoleLine = {
   at: string;
 };
 
-type ConsoleTab = "all" | "insights" | "stdout" | "stderr";
+type ConsoleTab = "all" | "insights" | "stdout" | "stderr" | "audit";
 
 type RunState = {
   running: boolean;
@@ -153,6 +160,7 @@ export function App() {
   const [aiExplaining, setAiExplaining] = useState(false);
   const [selectedWorkflowId, setSelectedWorkflowId] = useState<string>("");
   const [workflowRunState, setWorkflowRunState] = useState<WorkflowRunState>({ running: false, stepRuns: [] });
+  const [riskReviewKey, setRiskReviewKey] = useState("");
   const abortRef = useRef<AbortController | null>(null);
   const runCaptureRef = useRef<RunCapture | null>(null);
   const schemaFileInputRef = useRef<HTMLInputElement | null>(null);
@@ -178,7 +186,24 @@ export function App() {
     return workspaceState.workflows.find((workflow) => workflow.id === selectedWorkflowId) ?? workspaceState.workflows[0] ?? null;
   }, [selectedWorkflowId, workspaceState.workflows]);
   const schemaValidation = useMemo(() => validateToolManifest(manifest), [manifest]);
-  const executableTrusted = useMemo(() => isExecutableTrusted(workspaceState, manifest.executable), [manifest.executable, workspaceState]);
+  const pinnedExecutablePath = useMemo(() => executablePinnedPath(manifest), [manifest]);
+  const manifestSchemaFingerprint = useMemo(() => schemaFingerprint(manifest), [manifest]);
+  const executableTrusted = useMemo(
+    () => isExecutableTrusted(workspaceState, manifest.executable, pinnedExecutablePath),
+    [manifest.executable, pinnedExecutablePath, workspaceState]
+  );
+  const schemaTrusted = useMemo(
+    () => manifest.source !== "imported" || isSchemaTrusted(workspaceState, manifestSchemaFingerprint),
+    [manifest.source, manifestSchemaFingerprint, workspaceState]
+  );
+  const adaptersTrusted = useMemo(() => areAdaptersTrusted(workspaceState, manifest.adapters), [manifest.adapters, workspaceState]);
+  const commandRisk = useMemo(() => {
+    const request = buildRunRequest(manifest, selectedCommand, values);
+    return detectCommandRisk(manifest, selectedCommand, [request.executable, ...request.baseArgs, ...request.args]);
+  }, [manifest, selectedCommand, values]);
+  const currentRiskReviewKey = useMemo(() => commandRiskReviewKey(manifest, selectedCommand, values), [manifest, selectedCommand, values]);
+  const destructiveRiskReviewed = !commandRisk.destructive || riskReviewKey === currentRiskReviewKey;
+  const canRunCommand = executableTrusted && schemaTrusted && adaptersTrusted && !commandRisk.requiresShell && destructiveRiskReviewed;
 
   const fieldStats = useMemo(() => {
     const total = selectedCommand.fields.length || 1;
@@ -213,6 +238,35 @@ export function App() {
       const next = updater(current);
       persistWorkspace(next);
       return next;
+    });
+  }
+
+  function audit(entry: Omit<Parameters<typeof appendAuditLog>[1], "id" | "at">) {
+    commitWorkspace((current) =>
+      appendAuditLog(current, {
+        id: createStorageId("audit"),
+        at: new Date().toISOString(),
+        ...entry
+      })
+    );
+  }
+
+  function redactedPreviewFor(manifestForPreview: ToolManifest, command: CommandSpec, fieldValues: FieldValues): string {
+    const redactedValues = redactSecretValues(command.fields, fieldValues, "[redacted]");
+    const request = buildRunRequest(manifestForPreview, command, redactedValues);
+    return formatCommand([request.executable, ...request.baseArgs, ...request.args]);
+  }
+
+  function blockRun(reason: string, action: "run.blocked" | "workflow.blocked" = "run.blocked", details?: { workflowId?: string; preview?: string }) {
+    appendConsole("stderr", reason);
+    audit({
+      action,
+      toolId: manifest.id,
+      commandId: selectedCommand.id,
+      workflowId: details?.workflowId,
+      executable: manifest.executable,
+      preview: details?.preview ?? redactedPreviewFor(manifest, selectedCommand, values),
+      reason
     });
   }
 
@@ -360,8 +414,24 @@ export function App() {
 
   async function handleRun() {
     if (runState.running) return;
-    if (!isExecutableTrusted(workspaceState, manifest.executable)) {
-      appendConsole("stderr", `Trust ${manifest.executable} before running local commands.`);
+    if (!executableTrusted) {
+      blockRun(`Trust ${manifest.executable} before running local commands.`);
+      return;
+    }
+    if (!schemaTrusted) {
+      blockRun(`Review and trust the imported schema for ${manifest.name} before running it.`);
+      return;
+    }
+    if (!adaptersTrusted) {
+      blockRun(`Trust the applied adapter metadata for ${manifest.name} before running it.`);
+      return;
+    }
+    if (commandRisk.requiresShell) {
+      blockRun("Shell mode is gated in this build. This command cannot run until it is represented as argv-safe fields.");
+      return;
+    }
+    if (commandRisk.destructive && !destructiveRiskReviewed) {
+      blockRun("Review and acknowledge the destructive-command warning before running.");
       return;
     }
 
@@ -369,7 +439,7 @@ export function App() {
     try {
       env = parseEnvText(runSettings.envText);
     } catch (error) {
-      appendConsole("stderr", error instanceof Error ? error.message : "Invalid environment settings.");
+      blockRun(error instanceof Error ? error.message : "Invalid environment settings.");
       return;
     }
 
@@ -400,6 +470,18 @@ export function App() {
     };
     setRunState({ running: true, exitCode: null, durationMs: null, command: actualCommand });
     appendConsole("system", `Running ${formatCommand(redactedCommand)}`);
+    audit({
+      action: "run.started",
+      toolId: manifest.id,
+      commandId: selectedCommand.id,
+      executable: manifest.executable,
+      preview: formatCommand(redactedCommand),
+      metadata: {
+        importedSchema: manifest.source === "imported",
+        destructive: commandRisk.destructive,
+        warningCount: commandRisk.warnings.length
+      }
+    });
 
     try {
       await runCommandStream(
@@ -546,6 +628,14 @@ export function App() {
     const contexts = stepRuns.map(workflowContextFromStepRun);
     setWorkflowRunState({ running: true, stepRuns });
     appendConsole("system", `Running workflow "${selectedWorkflow.name}" ${mode === "next" ? "one step" : "from the first step"}.`);
+    audit({
+      action: "workflow.started",
+      workflowId: selectedWorkflow.id,
+      outcome: mode,
+      metadata: {
+        stepCount: stepsToRun.length
+      }
+    });
 
     try {
       for (const step of stepsToRun) {
@@ -561,15 +651,27 @@ export function App() {
       setWorkflowRunState({ running: false, stepRuns });
       abortRef.current = null;
       commitWorkspace((current) =>
-        appendWorkflowRun(current, {
-          id: createStorageId("workflow-run"),
-          workflowId: selectedWorkflow.id,
-          workflowName: selectedWorkflow.name,
-          status,
-          stepRuns,
-          startedAt,
-          completedAt
-        })
+        appendAuditLog(
+          appendWorkflowRun(current, {
+            id: createStorageId("workflow-run"),
+            workflowId: selectedWorkflow.id,
+            workflowName: selectedWorkflow.name,
+            status,
+            stepRuns,
+            startedAt,
+            completedAt
+          }),
+          {
+            id: createStorageId("audit"),
+            at: completedAt,
+            action: "workflow.completed",
+            workflowId: selectedWorkflow.id,
+            outcome: status,
+            metadata: {
+              stepCount: stepRuns.length
+            }
+          }
+        )
       );
       appendConsole("system", `Workflow "${selectedWorkflow.name}" ${status}.`);
     }
@@ -585,20 +687,56 @@ export function App() {
     const stepCommand = stepManifest?.commands.find((command) => command.id === step.commandId);
     const startedAt = new Date().toISOString();
     const startedMs = Date.now();
+    const failStep = (message: string, details?: { toolId?: string; commandId?: string; executable?: string; preview?: string }) => {
+      audit({
+        action: "workflow.blocked",
+        toolId: details?.toolId,
+        commandId: details?.commandId,
+        workflowId: workflow.id,
+        executable: details?.executable,
+        preview: details?.preview,
+        reason: message
+      });
+      return createFailedWorkflowStepRun(step, message, startedAt, startedMs);
+    };
 
     if (!stepManifest || !stepCommand) {
-      return createFailedWorkflowStepRun(step, "Workflow step references a tool or command that no longer exists.", startedAt, startedMs);
+      return failStep("Workflow step references a tool or command that no longer exists.");
     }
 
-    if (!isExecutableTrusted(workspaceState, stepManifest.executable)) {
-      return createFailedWorkflowStepRun(step, `Trust ${stepManifest.executable} before running workflow step "${step.name}".`, startedAt, startedMs);
+    const stepPinnedPath = executablePinnedPath(stepManifest);
+    if (!isExecutableTrusted(workspaceState, stepManifest.executable, stepPinnedPath)) {
+      return failStep(`Trust ${stepManifest.executable} before running workflow step "${step.name}".`, {
+        toolId: stepManifest.id,
+        commandId: stepCommand.id,
+        executable: stepManifest.executable
+      });
+    }
+    const stepSchemaFingerprint = schemaFingerprint(stepManifest);
+    if (stepManifest.source === "imported" && !isSchemaTrusted(workspaceState, stepSchemaFingerprint)) {
+      return failStep(`Review and trust the imported schema before running workflow step "${step.name}".`, {
+        toolId: stepManifest.id,
+        commandId: stepCommand.id,
+        executable: stepManifest.executable
+      });
+    }
+    if (!areAdaptersTrusted(workspaceState, stepManifest.adapters)) {
+      return failStep(`Trust adapter metadata before running workflow step "${step.name}".`, {
+        toolId: stepManifest.id,
+        commandId: stepCommand.id,
+        executable: stepManifest.executable
+      });
     }
 
     let env: Record<string, string> | undefined;
     try {
       env = parseEnvText(step.runSettings?.envText ?? "");
     } catch (error) {
-      return createFailedWorkflowStepRun(step, error instanceof Error ? error.message : "Invalid workflow step environment.", startedAt, startedMs);
+      return failStep(error instanceof Error ? error.message : "Invalid workflow step environment.", {
+        toolId: stepManifest.id,
+        commandId: stepCommand.id,
+        executable: stepManifest.executable
+      });
     }
 
     const resolvedValues = resolveWorkflowValues(step.values, contexts);
@@ -612,6 +750,23 @@ export function App() {
     const redactedRequest = resolveWorkflowRunRequest(buildRunRequest(stepManifest, stepCommand, redactedValues, runOptions), contexts);
     const actualCommand = [request.executable, ...request.baseArgs, ...request.args];
     const redactedCommand = [redactedRequest.executable, ...redactedRequest.baseArgs, ...redactedRequest.args];
+    const stepRisk = detectCommandRisk(stepManifest, stepCommand, actualCommand);
+    if (stepRisk.requiresShell) {
+      return failStep("Shell mode is gated in this build. Workflow step cannot run.", {
+        toolId: stepManifest.id,
+        commandId: stepCommand.id,
+        executable: stepManifest.executable,
+        preview: formatCommand(redactedCommand)
+      });
+    }
+    if (stepRisk.destructive) {
+      return failStep("Destructive workflow steps require direct command review before workflow execution.", {
+        toolId: stepManifest.id,
+        commandId: stepCommand.id,
+        executable: stepManifest.executable,
+        preview: formatCommand(redactedCommand)
+      });
+    }
     let stdout = "";
     let stderr = "";
     let exitCode: number | null = null;
@@ -634,6 +789,18 @@ export function App() {
     });
 
     appendConsole("system", `Workflow ${workflow.name}: running ${step.name}`);
+    audit({
+      action: "run.started",
+      toolId: stepManifest.id,
+      commandId: stepCommand.id,
+      workflowId: workflow.id,
+      executable: stepManifest.executable,
+      preview: formatCommand(redactedCommand),
+      metadata: {
+        workflowStep: true,
+        warningCount: stepRisk.warnings.length
+      }
+    });
 
     try {
       await runCommandStream(
@@ -688,6 +855,20 @@ export function App() {
       completedAt
     };
     upsertLiveWorkflowStep(stepRun);
+    audit({
+      action: "run.completed",
+      toolId: stepManifest.id,
+      commandId: stepCommand.id,
+      workflowId: workflow.id,
+      executable: stepManifest.executable,
+      preview: formatCommand(redactedCommand),
+      outcome: status,
+      metadata: {
+        workflowStep: true,
+        exitCode: exitCode ?? undefined,
+        durationMs
+      }
+    });
     return stepRun;
   }
 
@@ -732,15 +913,83 @@ export function App() {
   }
 
   function handleTrustExecutable() {
+    const now = new Date().toISOString();
     commitWorkspace((current) =>
-      trustExecutable(current, {
-        executable: manifest.executable,
-        name: manifest.name,
-        source: manifest.source === "imported" ? "imported" : "user",
-        trustedAt: new Date().toISOString()
-      })
+      appendAuditLog(
+        trustExecutable(current, {
+          executable: manifest.executable,
+          name: manifest.name,
+          source: manifest.source === "imported" ? "imported" : "user",
+          pinnedPath: pinnedExecutablePath,
+          resolutionType: manifest.discovery?.resolution.type,
+          trustedAt: now
+        }),
+        {
+          id: createStorageId("audit"),
+          at: now,
+          action: "trust.executable",
+          toolId: manifest.id,
+          executable: manifest.executable,
+          metadata: {
+            pinned: pinnedExecutablePath ? true : false
+          }
+        }
+      )
     );
-    appendConsole("system", `Trusted executable for local runs: ${manifest.executable}`);
+    appendConsole("system", `Trusted executable for local runs: ${pinnedExecutablePath ?? manifest.executable}`);
+  }
+
+  function handleTrustSchema() {
+    const now = new Date().toISOString();
+    commitWorkspace((current) =>
+      appendAuditLog(
+        trustSchema(current, {
+          fingerprint: manifestSchemaFingerprint,
+          toolId: manifest.id,
+          name: manifest.name,
+          source: manifest.source,
+          trustedAt: now
+        }),
+        {
+          id: createStorageId("audit"),
+          at: now,
+          action: "trust.schema",
+          toolId: manifest.id,
+          executable: manifest.executable,
+          metadata: {
+            imported: manifest.source === "imported"
+          }
+        }
+      )
+    );
+    appendConsole("system", `Trusted schema for ${manifest.name}: ${manifestSchemaFingerprint}`);
+  }
+
+  function handleTrustAdapters() {
+    const now = new Date().toISOString();
+    commitWorkspace((current) => {
+      const withAdapters = (manifest.adapters ?? []).reduce(
+        (state, adapter) =>
+          trustAdapter(state, {
+            id: adapter.id,
+            name: adapter.name,
+            version: adapter.version,
+            trustedAt: now
+          }),
+        current
+      );
+      return appendAuditLog(withAdapters, {
+        id: createStorageId("audit"),
+        at: now,
+        action: "trust.adapter",
+        toolId: manifest.id,
+        executable: manifest.executable,
+        metadata: {
+          count: manifest.adapters?.length ?? 0
+        }
+      });
+    });
+    appendConsole("system", `Trusted adapter metadata for ${manifest.adapters?.map(adapterTrustKey).join(", ") || manifest.name}.`);
   }
 
   function handleRunEvent(event: RunEvent) {
@@ -795,7 +1044,22 @@ export function App() {
         startedAt: capture.startedAt,
         completedAt: event.at
       };
-      commitWorkspace((current) => appendRun(current, storedRun));
+      commitWorkspace((current) =>
+        appendAuditLog(appendRun(current, storedRun), {
+          id: createStorageId("audit"),
+          at: event.at,
+          action: "run.completed",
+          toolId: capture.toolId,
+          commandId: capture.commandId,
+          executable: capture.command[0],
+          preview: capture.preview,
+          outcome: event.timedOut ? "timed_out" : event.exitCode === 0 ? "succeeded" : "failed",
+          metadata: {
+            exitCode: event.exitCode ?? undefined,
+            durationMs: event.durationMs
+          }
+        })
+      );
       runCaptureRef.current = null;
     }
   }
@@ -1009,18 +1273,30 @@ export function App() {
               onValueChange={(fieldId, value) => setValues((current) => ({ ...current, [fieldId]: value }))}
             />
             <CommandPreview
+              adapters={manifest.adapters}
+              adaptersTrusted={adaptersTrusted}
+              canRun={canRunCommand}
+              commandRisk={commandRisk}
               executable={manifest.executable}
               isTrusted={executableTrusted}
+              pinnedPath={pinnedExecutablePath}
               presets={commandPresets}
               preview={commandPreview}
               runSettings={runSettings}
               runState={runState}
+              schemaFingerprint={manifestSchemaFingerprint}
+              schemaRequiresTrust={manifest.source === "imported"}
+              schemaTrusted={schemaTrusted}
+              destructiveRiskReviewed={destructiveRiskReviewed}
+              onDestructiveRiskReviewChange={(reviewed) => setRiskReviewKey(reviewed ? currentRiskReviewKey : "")}
               onCancel={handleCancel}
               onLoadPreset={handleLoadPreset}
               onRun={handleRun}
               onRunSettingsChange={setRunSettings}
               onSavePreset={handleSavePreset}
+              onTrustAdapters={handleTrustAdapters}
               onTrustExecutable={handleTrustExecutable}
+              onTrustSchema={handleTrustSchema}
             />
           </section>
           <aside className="inspector-panel">
@@ -1097,6 +1373,7 @@ export function App() {
           aiExplanation={aiExplanation}
           aiExplaining={aiExplaining}
           aiSettings={workspaceState.aiSettings}
+          auditLog={workspaceState.auditLog}
           lines={consoleLines}
           runs={workspaceState.runs}
           runState={runState}
@@ -1441,32 +1718,59 @@ function GeneratedField({
 }
 
 function CommandPreview({
+  adapters,
+  adaptersTrusted,
+  canRun,
+  commandRisk,
   executable,
   isTrusted,
+  pinnedPath,
   presets,
   preview,
   runSettings,
+  schemaFingerprint,
+  schemaRequiresTrust,
+  schemaTrusted,
+  destructiveRiskReviewed,
   onRun,
   onCancel,
   onSavePreset,
   onLoadPreset,
   onRunSettingsChange,
+  onTrustAdapters,
   onTrustExecutable,
+  onTrustSchema,
+  onDestructiveRiskReviewChange,
   runState
 }: {
+  adapters?: ToolManifest["adapters"];
+  adaptersTrusted: boolean;
+  canRun: boolean;
+  commandRisk: CommandRisk;
   executable: string;
   isTrusted: boolean;
+  pinnedPath?: string;
   presets: SavedPreset[];
   preview: string;
   runSettings: RunSettings;
+  schemaFingerprint: string;
+  schemaRequiresTrust: boolean;
+  schemaTrusted: boolean;
+  destructiveRiskReviewed: boolean;
   onRun: () => void;
   onCancel: () => void;
   onSavePreset: () => void;
   onLoadPreset: (presetId: string) => void;
   onRunSettingsChange: (settings: RunSettings) => void;
+  onTrustAdapters: () => void;
   onTrustExecutable: () => void;
+  onTrustSchema: () => void;
+  onDestructiveRiskReviewChange: (reviewed: boolean) => void;
   runState: RunState;
 }) {
+  const adapterLabel = adapters?.map(adapterTrustKey).join(", ");
+  const trustBlocked = !isTrusted || !schemaTrusted || !adaptersTrusted || commandRisk.requiresShell || (commandRisk.destructive && !destructiveRiskReviewed);
+
   return (
     <section className="command-preview">
       <div className="command-preview-header">
@@ -1492,7 +1796,7 @@ function CommandPreview({
                 Cancel
               </button>
             ) : null}
-            <button className="primary-button" data-testid="run-command" onClick={onRun} disabled={runState.running || !isTrusted}>
+            <button className="primary-button" data-testid="run-command" onClick={onRun} disabled={runState.running || !canRun}>
               <Play size={16} />
               Run
             </button>
@@ -1503,7 +1807,7 @@ function CommandPreview({
       <div className={`run-safety-panel ${isTrusted ? "trusted" : "untrusted"}`}>
         <div>
           <strong>{isTrusted ? "Trusted executable" : "Trust required"}</strong>
-          <code>{executable}</code>
+          <code>{pinnedPath ?? executable}</code>
         </div>
         {isTrusted ? (
           <span>argument-array execution</span>
@@ -1513,6 +1817,46 @@ function CommandPreview({
           </button>
         )}
       </div>
+      {schemaRequiresTrust || adapters?.length ? (
+        <div className="trust-stack">
+          {schemaRequiresTrust ? (
+            <div className={`trust-row ${schemaTrusted ? "trusted" : "untrusted"}`}>
+              <div>
+                <strong>{schemaTrusted ? "Trusted imported schema" : "Imported schema review required"}</strong>
+                <code>{schemaFingerprint}</code>
+              </div>
+              {schemaTrusted ? <span>reviewed</span> : <button className="secondary-button compact-button" onClick={onTrustSchema}>Trust Schema</button>}
+            </div>
+          ) : null}
+          {adapters?.length ? (
+            <div className={`trust-row ${adaptersTrusted ? "trusted" : "untrusted"}`}>
+              <div>
+                <strong>{adaptersTrusted ? "Trusted adapter metadata" : "Adapter trust required"}</strong>
+                <code>{adapterLabel}</code>
+              </div>
+              {adaptersTrusted ? <span>reviewed</span> : <button className="secondary-button compact-button" onClick={onTrustAdapters}>Trust Adapters</button>}
+            </div>
+          ) : null}
+        </div>
+      ) : null}
+      {commandRisk.warnings.length > 0 || commandRisk.destructive || commandRisk.requiresShell ? (
+        <div className={`run-risk-panel ${commandRisk.requiresShell || commandRisk.destructive ? "warning" : ""}`}>
+          <div className="run-risk-heading">
+            <AlertTriangle size={15} />
+            <strong>{commandRisk.requiresShell ? "Shell mode gated" : commandRisk.destructive ? "Destructive command warning" : "Command review note"}</strong>
+          </div>
+          {commandRisk.warnings.map((warning) => (
+            <p key={warning}>{warning}</p>
+          ))}
+          {commandRisk.destructive && !commandRisk.requiresShell ? (
+            <label className="inline-check risk-ack">
+              <input type="checkbox" checked={destructiveRiskReviewed} onChange={(event) => onDestructiveRiskReviewChange(event.target.checked)} />
+              I reviewed this destructive command preview
+            </label>
+          ) : null}
+        </div>
+      ) : null}
+      {trustBlocked ? <p className="run-block-note">Run is disabled until all trust and safety gates pass.</p> : null}
       <div className="run-settings-grid">
         <label className="run-setting-field">
           <span>Working Directory</span>
@@ -2216,6 +2560,7 @@ function SchemaSourceView({ manifest }: { manifest: ToolManifest }) {
 function OutputConsole({
   lines,
   runs,
+  auditLog,
   activeTab,
   aiExplanation,
   aiExplaining,
@@ -2228,6 +2573,7 @@ function OutputConsole({
 }: {
   lines: ConsoleLine[];
   runs: StoredRun[];
+  auditLog: AuditLogEntry[];
   activeTab: ConsoleTab;
   aiExplanation: AiCompletion | null;
   aiExplaining: boolean;
@@ -2247,9 +2593,9 @@ function OutputConsole({
     <section className="console-panel">
       <div className="console-toolbar">
         <div className="console-tabs">
-          {(["all", "insights", "stdout", "stderr"] as const).map((tab) => (
+          {(["all", "insights", "stdout", "stderr", "audit"] as const).map((tab) => (
             <button className={activeTab === tab ? "selected" : ""} onClick={() => onTabChange(tab)} key={tab}>
-              {tab === "all" ? "Run History" : tab === "insights" ? "Insights" : tab}
+              {tab === "all" ? "Run History" : tab === "insights" ? "Insights" : tab === "audit" ? "Audit" : tab}
             </button>
           ))}
         </div>
@@ -2302,7 +2648,23 @@ function OutputConsole({
             ))}
           </div>
         ) : null}
-        {activeTab !== "insights" ? visibleLines.map((line) => (
+        {activeTab === "audit" ? (
+          <div className="audit-list" data-testid="audit-log">
+            {auditLog.length > 0 ? (
+              auditLog.slice(0, 20).map((entry) => (
+                <div className="audit-item" key={entry.id}>
+                  <span>{new Date(entry.at).toLocaleTimeString()}</span>
+                  <code>{entry.action}</code>
+                  <strong>{entry.outcome ?? entry.reason ?? entry.executable ?? entry.toolId ?? "recorded"}</strong>
+                  {entry.preview ? <pre>{entry.preview}</pre> : null}
+                </div>
+              ))
+            ) : (
+              <div className="empty-state compact">No audit records yet.</div>
+            )}
+          </div>
+        ) : null}
+        {activeTab !== "insights" && activeTab !== "audit" ? visibleLines.map((line) => (
           <div className={`console-line ${line.stream}`} key={line.id}>
             <span>{new Date(line.at).toLocaleTimeString()}</span>
             <code>{line.stream}</code>

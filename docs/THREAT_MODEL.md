@@ -42,28 +42,29 @@ GIVEMEUI is a local app that helps users run local command-line tools. Its prima
 | --- | --- | --- |
 | Command injection | User input becomes shell code | Store executable and arguments as arrays; no shell mode by default |
 | Misleading generated UI | Friendly label hides dangerous flag | Preserve raw help, show flag names, allow schema review |
-| Destructive command execution | UI makes destructive commands easy to run | Add safety metadata, trust prompts, and clear previews |
+| Destructive command execution | UI makes destructive commands easy to run | Detect destructive patterns, show warnings, require preview acknowledgement, and block destructive workflow steps until workflow-level review exists |
 | Secret leakage | Passwords or tokens saved into presets/logs | Secret field type and redaction before persistence |
-| Unsafe schema import | Imported JSON hides risky defaults | Treat imports as untrusted and require review |
-| Wrong binary execution | `$PATH` resolves unexpected executable | Show executable path and add trust decisions |
+| Unsafe schema import | Imported JSON hides risky defaults | Treat imports as untrusted, fingerprint schemas, and require review before execution |
+| Wrong binary execution | `$PATH` resolves unexpected executable | Show executable path and pin trust decisions to resolved paths when discovery provides them |
 | Dual-use tool misuse | UI accelerates unauthorized activity | No bundled unauthorized presets, exact previews, sensitive metadata |
 | AI hallucination | AI invents invalid or unsafe flags | AI suggestions are optional, diffable, and user-reviewed |
 
 ## Command Execution Rules
 
 - Default execution uses `spawn(executable, args, { shell: false })`.
-- Shell mode is out of scope until it has explicit gating.
+- Shell mode is gated and does not execute in this build.
 - Every run must have a visible command preview.
-- Newly discovered executables should become trust decisions before production V1.
+- Newly discovered executables must become trust decisions before execution.
 - Timeouts and cancellation are required.
 - stdout and stderr are captured separately.
+- Trust decisions and execution events are recorded in the local audit log with redacted previews.
 
 ## Schema Import Rules
 
 - Validate structure before storing.
 - Preserve provenance.
 - Do not trust labels more than flags.
-- Imported schemas should open in review mode.
+- Imported schemas open in review mode and require explicit trust before execution.
 - Future schema versions must not silently break old presets or run records.
 
 ## Secret Handling Rules
