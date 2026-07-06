@@ -5,9 +5,11 @@ import { formatCommand } from "../src/lib/commandLine";
 import { discoverCommand } from "./discovery";
 import { runCommand } from "./runner";
 import { detectLocalAiProviders, suggestSchemaPatch, summarizeRunOutput } from "./ai";
+import { getProjectDatabase } from "./projectDb";
 import type { AiRunSummaryRequest, AiSettings } from "../src/lib/ai";
 import type { DiscoveryRequest, RunRequest } from "../src/lib/schema";
 import type { ToolManifest } from "../src/lib/schema";
+import type { WorkspaceState } from "../src/lib/storage";
 
 const STATIC_DIR = process.env.GIVEMEUI_STATIC_DIR;
 const HOST = process.env.GIVEMEUI_HOST ?? "127.0.0.1";
@@ -17,6 +19,54 @@ const server = createServer(async (req, res) => {
   try {
     if (req.method === "GET" && req.url === "/api/health") {
       sendJson(res, { ok: true });
+      return;
+    }
+
+    if (req.method === "GET" && req.url === "/api/projects") {
+      const database = await getProjectDatabase();
+      sendJson(res, database.getSnapshot());
+      return;
+    }
+
+    if (req.method === "POST" && req.url === "/api/workspace") {
+      const body = await readJson<{ projectId?: string; workspace: WorkspaceState }>(req);
+      const database = await getProjectDatabase();
+      sendJson(res, database.saveWorkspace(body.workspace, body.projectId));
+      return;
+    }
+
+    if (req.method === "POST" && req.url === "/api/projects") {
+      const body = await readJson<{ name?: string }>(req);
+      const database = await getProjectDatabase();
+      sendJson(res, database.createProject(body.name ?? "New Project"));
+      return;
+    }
+
+    if (req.method === "POST" && req.url === "/api/projects/select") {
+      const body = await readJson<{ projectId: string }>(req);
+      const database = await getProjectDatabase();
+      sendJson(res, database.selectProject(body.projectId));
+      return;
+    }
+
+    if (req.method === "POST" && req.url === "/api/projects/delete") {
+      const body = await readJson<{ projectId: string }>(req);
+      const database = await getProjectDatabase();
+      sendJson(res, database.deleteProject(body.projectId));
+      return;
+    }
+
+    if (req.method === "POST" && req.url === "/api/projects/export") {
+      const body = await readJson<{ projectId?: string }>(req);
+      const database = await getProjectDatabase();
+      sendJson(res, database.exportProject(body.projectId));
+      return;
+    }
+
+    if (req.method === "POST" && req.url === "/api/projects/cleanup") {
+      const body = await readJson<{ projectId?: string }>(req);
+      const database = await getProjectDatabase();
+      sendJson(res, database.cleanupProject(body.projectId));
       return;
     }
 

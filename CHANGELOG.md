@@ -26,6 +26,7 @@ This project follows the spirit of semantic versioning while it is pre-1.0: mino
 - Phase 8 workflow builder with saved sequential workflows, previous-step variable references, step-by-step/full workflow runs, and per-step logs/artifacts.
 - Workflow builder tightening with inline workflow/step renaming, reusable workflow preset duplication, and copyable previous-step artifact tokens.
 - Phase 9 security and trust hardening with schema/adapter trust, executable path pinning, destructive warnings, shell gating, provenance metadata, and a local audit log.
+- Phase 10 local SQLite project model with migrations, project switching, workspace save/load, JSON project export, delete flow, cleanup flow, and output artifact metadata persistence.
 
 ### Security
 

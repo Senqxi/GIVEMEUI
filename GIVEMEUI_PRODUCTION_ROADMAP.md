@@ -648,18 +648,20 @@ Make the product useful over time.
 
 ### Tasks
 
-1. Add SQLite schema.
-2. Add migrations.
-3. Add repository/data-access layer.
-4. Add backup/export.
-5. Add delete and cleanup flows.
-6. Add project/workspace support.
+1. Add SQLite schema. **Complete.**
+2. Add migrations. **Complete.**
+3. Add repository/data-access layer. **Complete.**
+4. Add backup/export. **Complete.**
+5. Add delete and cleanup flows. **Complete.**
+6. Add project/workspace support. **Complete.**
 
 ### Exit Criteria
 
-- User data persists across restarts.
-- Database migrations are tested.
-- User can export important data.
+- User data persists across restarts. **Complete.**
+- Database migrations are tested. **Complete.**
+- User can export important data. **Complete.**
+
+Status: complete for the current local CLI alpha. See `docs/PHASE_10_PERSISTENCE_PROJECT_MODEL.md`.
 
 ## Phase 11: Production UI
 

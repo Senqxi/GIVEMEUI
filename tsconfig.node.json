@@ -17,9 +17,14 @@
     "server",
     "src/lib/adapters.ts",
     "src/lib/ai.ts",
+    "src/lib/commandBuilder.ts",
     "src/lib/commandLine.ts",
     "src/lib/helpParser.ts",
     "src/lib/outputAnalysis.ts",
-    "src/lib/schema.ts"
+    "src/lib/projects.ts",
+    "src/lib/schema.ts",
+    "src/lib/schemaValidation.ts",
+    "src/lib/storage.ts",
+    "src/lib/workflows.ts"
   ]
 }

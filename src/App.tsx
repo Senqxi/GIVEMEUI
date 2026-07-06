@@ -16,11 +16,25 @@ import {
   Terminal,
   Wrench
 } from "./components/icons";
-import { detectAiProviders, discoverTool, runCommandStream, summarizeRunOutput as summarizeRunOutputWithAi, suggestSchemaPatch as suggestSchemaPatchWithAi } from "./lib/api";
+import {
+  cleanupProject as cleanupProjectData,
+  createProject as createProjectData,
+  deleteProject as deleteProjectData,
+  detectAiProviders,
+  discoverTool,
+  exportProject as exportProjectData,
+  loadProjectSnapshot,
+  runCommandStream,
+  saveProjectWorkspace,
+  selectProject as selectProjectData,
+  summarizeRunOutput as summarizeRunOutputWithAi,
+  suggestSchemaPatch as suggestSchemaPatchWithAi
+} from "./lib/api";
 import { isAiEnabled, normalizeAiSettings, type AiCompletion, type AiProviderDetection, type AiSchemaSuggestion, type AiSettings } from "./lib/ai";
 import { buildCommandPreview, buildRunRequest, initialValuesFor, type FieldValues } from "./lib/commandBuilder";
 import { formatCommand } from "./lib/commandLine";
 import { analyzeRunOutput, type OutputAnalysis, type OutputArtifact } from "./lib/outputAnalysis";
+import type { ProjectSnapshot } from "./lib/projects";
 import { parseEnvText, timeoutMsFromSeconds } from "./lib/runSettings";
 import { sampleManifest } from "./lib/sampleData";
 import { exportSchemaJson, importSchemaJson, schemaExportFilename } from "./lib/schemaTransfer";
@@ -32,6 +46,7 @@ import {
   appendWorkflowRun,
   areAdaptersTrusted,
   createStorageId,
+  createWorkspace,
   isExecutableTrusted,
   isSchemaTrusted,
   loadWorkspace,
@@ -158,6 +173,8 @@ export function App() {
   const [schemaSuggestionStatus, setSchemaSuggestionStatus] = useState<string>("");
   const [aiExplanation, setAiExplanation] = useState<AiCompletion | null>(null);
   const [aiExplaining, setAiExplaining] = useState(false);
+  const [projectSnapshot, setProjectSnapshot] = useState<ProjectSnapshot | null>(null);
+  const [projectStatus, setProjectStatus] = useState("Loading project database...");
   const [selectedWorkflowId, setSelectedWorkflowId] = useState<string>("");
   const [workflowRunState, setWorkflowRunState] = useState<WorkflowRunState>({ running: false, stepRuns: [] });
   const [riskReviewKey, setRiskReviewKey] = useState("");
@@ -233,10 +250,49 @@ export function App() {
     setSelectedWorkflowId(workspaceState.workflows[0]?.id ?? "");
   }, [selectedWorkflowId, workspaceState.workflows]);
 
+  useEffect(() => {
+    let canceled = false;
+
+    async function loadProject() {
+      try {
+        const snapshot = await loadProjectSnapshot();
+        if (canceled) return;
+
+        setProjectSnapshot(snapshot);
+        if (snapshot.workspace) {
+          applyWorkspaceSnapshot(snapshot, snapshot.workspace);
+        } else {
+          const saved = await saveProjectWorkspace(workspaceState, snapshot.activeProjectId);
+          if (canceled) return;
+          setProjectSnapshot(saved);
+          setProjectStatus(`Initialized ${projectName(saved)} in SQLite.`);
+        }
+      } catch (error) {
+        if (canceled) return;
+        setProjectStatus(error instanceof Error ? `SQLite unavailable: ${error.message}` : "SQLite unavailable. Using browser fallback.");
+      }
+    }
+
+    void loadProject();
+    return () => {
+      canceled = true;
+    };
+  }, []);
+
   function commitWorkspace(updater: (current: WorkspaceState) => WorkspaceState) {
     setWorkspaceState((current) => {
       const next = updater(current);
       persistWorkspace(next);
+      if (projectSnapshot) {
+        void saveProjectWorkspace(next, projectSnapshot.activeProjectId)
+          .then((snapshot) => {
+            setProjectSnapshot((currentSnapshot) => (currentSnapshot?.activeProjectId === snapshot.activeProjectId ? snapshot : currentSnapshot));
+            setProjectStatus(`Saved ${projectName(snapshot)} to SQLite.`);
+          })
+          .catch((error) => {
+            setProjectStatus(error instanceof Error ? `SQLite save failed: ${error.message}` : "SQLite save failed.");
+          });
+      }
       return next;
     });
   }
@@ -1083,6 +1139,101 @@ export function App() {
     setValues(initialValuesFor(nextCommand));
   }
 
+  async function handleCreateProject() {
+    const name = window.prompt("Project name", `Project ${(projectSnapshot?.projects.length ?? 0) + 1}`)?.trim();
+    if (!name) return;
+
+    try {
+      const created = await createProjectData(name);
+      const workspace = createWorkspace(sampleManifest);
+      const saved = await saveProjectWorkspace(workspace, created.activeProjectId);
+      applyWorkspaceSnapshot(saved, workspace);
+      appendConsole("system", `Created project "${projectName(saved)}".`);
+    } catch (error) {
+      appendConsole("stderr", error instanceof Error ? error.message : "Project creation failed.");
+    }
+  }
+
+  async function handleSelectProject(projectId: string) {
+    try {
+      const selected = await selectProjectData(projectId);
+      if (selected.workspace) {
+        applyWorkspaceSnapshot(selected, selected.workspace);
+        appendConsole("system", `Opened project "${projectName(selected)}".`);
+        return;
+      }
+
+      const workspace = createWorkspace(sampleManifest);
+      const saved = await saveProjectWorkspace(workspace, selected.activeProjectId);
+      applyWorkspaceSnapshot(saved, workspace);
+      appendConsole("system", `Initialized project "${projectName(saved)}".`);
+    } catch (error) {
+      appendConsole("stderr", error instanceof Error ? error.message : "Project selection failed.");
+    }
+  }
+
+  async function handleDeleteProject() {
+    if (!projectSnapshot || projectSnapshot.projects.length <= 1) {
+      appendConsole("stderr", "Cannot delete the last project.");
+      return;
+    }
+
+    const activeProject = projectSnapshot.projects.find((project) => project.id === projectSnapshot.activeProjectId);
+    const name = activeProject?.name ?? "current project";
+    if (!window.confirm(`Delete "${name}" and its local data? This cannot be undone.`)) return;
+
+    try {
+      const snapshot = await deleteProjectData(projectSnapshot.activeProjectId);
+      const workspace = snapshot.workspace ?? createWorkspace(sampleManifest);
+      applyWorkspaceSnapshot(snapshot, workspace);
+      appendConsole("system", `Deleted project "${name}".`);
+    } catch (error) {
+      appendConsole("stderr", error instanceof Error ? error.message : "Project deletion failed.");
+    }
+  }
+
+  async function handleExportProject() {
+    try {
+      const exported = await exportProjectData(projectSnapshot?.activeProjectId);
+      const filename = `${sanitizeFilename(exported.project.name)}.givemeui.project.json`;
+      downloadText(filename, JSON.stringify(exported, null, 2));
+      appendConsole("system", `Exported project backup ${filename}.`);
+    } catch (error) {
+      appendConsole("stderr", error instanceof Error ? error.message : "Project export failed.");
+    }
+  }
+
+  async function handleCleanupProject() {
+    try {
+      const result = await cleanupProjectData(projectSnapshot?.activeProjectId);
+      const snapshot = await loadProjectSnapshot();
+      if (snapshot.workspace) {
+        applyWorkspaceSnapshot(snapshot, snapshot.workspace);
+      } else {
+        setProjectSnapshot(snapshot);
+      }
+      appendConsole(
+        "system",
+        `Cleaned project data: ${result.runsRemoved} runs, ${result.workflowRunsRemoved} workflow runs, ${result.auditEntriesRemoved} audit records removed.`
+      );
+    } catch (error) {
+      appendConsole("stderr", error instanceof Error ? error.message : "Project cleanup failed.");
+    }
+  }
+
+  function applyWorkspaceSnapshot(snapshot: ProjectSnapshot, workspace: WorkspaceState) {
+    setProjectSnapshot(snapshot);
+    setWorkspaceState(workspace);
+    persistWorkspace(workspace);
+    const nextManifest = workspace.manifests.find((tool) => tool.id === workspace.activeToolId) ?? workspace.manifests[0] ?? sampleManifest;
+    const nextCommand = nextManifest.commands[0] ?? sampleManifest.commands[0];
+    setSelectedCommandId(nextCommand.id);
+    setSelectedFieldId(nextCommand.fields[0]?.id ?? null);
+    setValues(initialValuesFor(nextCommand));
+    setWorkflowRunState({ running: false, stepRuns: [] });
+    setProjectStatus(`Loaded ${projectName(snapshot)} from SQLite.`);
+  }
+
   function handleNewTool() {
     setCommandInput("");
     appendConsole("system", "Enter a command in the discovery bar to create a new local tool schema.");
@@ -1224,8 +1375,15 @@ export function App() {
         activeToolId={manifest.id}
         aiSettings={workspaceState.aiSettings}
         manifests={workspaceState.manifests}
+        projectSnapshot={projectSnapshot}
+        projectStatus={projectStatus}
         runCount={workspaceState.runs.length}
+        onCleanupProject={() => void handleCleanupProject()}
+        onCreateProject={() => void handleCreateProject()}
+        onDeleteProject={() => void handleDeleteProject()}
+        onExportProject={() => void handleExportProject()}
         onNewTool={handleNewTool}
+        onSelectProject={(projectId) => void handleSelectProject(projectId)}
         onSelectManifest={handleSelectManifest}
         onSettings={() => setShowAiSettings(true)}
         onShowRuns={() => setActiveConsoleTab("all")}
@@ -1401,8 +1559,15 @@ function Sidebar({
   activeToolId,
   aiSettings,
   manifests,
+  projectSnapshot,
+  projectStatus,
   runCount,
+  onCleanupProject,
+  onCreateProject,
+  onDeleteProject,
+  onExportProject,
   onNewTool,
+  onSelectProject,
   onSelectManifest,
   onSettings,
   onShowRuns
@@ -1410,8 +1575,15 @@ function Sidebar({
   activeToolId: string;
   aiSettings: AiSettings;
   manifests: ToolManifest[];
+  projectSnapshot: ProjectSnapshot | null;
+  projectStatus: string;
   runCount: number;
+  onCleanupProject: () => void;
+  onCreateProject: () => void;
+  onDeleteProject: () => void;
+  onExportProject: () => void;
   onNewTool: () => void;
+  onSelectProject: (projectId: string) => void;
   onSelectManifest: (toolId: string) => void;
   onSettings: () => void;
   onShowRuns: () => void;
@@ -1432,6 +1604,37 @@ function Sidebar({
         <Sparkles size={16} />
         New Tool
       </button>
+
+      <section className="sidebar-section project-section">
+        <div className="section-label">Project</div>
+        <select
+          className="project-select"
+          aria-label="Project"
+          value={projectSnapshot?.activeProjectId ?? ""}
+          onChange={(event) => event.target.value && onSelectProject(event.target.value)}
+        >
+          {projectSnapshot?.projects.map((project) => (
+            <option value={project.id} key={project.id}>
+              {project.name}
+            </option>
+          )) ?? <option value="">Loading project</option>}
+        </select>
+        <div className="project-actions">
+          <button className="mini-button" onClick={onCreateProject}>
+            New
+          </button>
+          <button className="mini-button" onClick={onExportProject} disabled={!projectSnapshot}>
+            Export
+          </button>
+          <button className="mini-button" onClick={onCleanupProject} disabled={!projectSnapshot}>
+            Clean
+          </button>
+          <button className="mini-button danger-mini" onClick={onDeleteProject} disabled={!projectSnapshot || projectSnapshot.projects.length <= 1}>
+            Delete
+          </button>
+        </div>
+        <small className="project-status">{projectStatus}</small>
+      </section>
 
       <nav className="sidebar-section">
         <div className="section-label">Tool Library</div>
@@ -2914,6 +3117,20 @@ function downloadText(filename: string, text: string): void {
   anchor.download = filename;
   anchor.click();
   URL.revokeObjectURL(href);
+}
+
+function projectName(snapshot: ProjectSnapshot): string {
+  return snapshot.projects.find((project) => project.id === snapshot.activeProjectId)?.name ?? "Project";
+}
+
+function sanitizeFilename(value: string): string {
+  return (
+    value
+      .toLowerCase()
+      .replace(/[^a-z0-9._-]+/g, "-")
+      .replace(/^-+|-+$/g, "")
+      .slice(0, 80) || "project"
+  );
 }
 
 async function copyTextToClipboard(text: string): Promise<void> {

@@ -3,6 +3,11 @@ declare const process: {
   cwd(): string;
 };
 
+declare const localStorage: {
+  getItem(key: string): string | null;
+  setItem(key: string, value: string): void;
+};
+
 declare const console: {
   log(message?: unknown, ...optionalParams: unknown[]): void;
 };
@@ -80,12 +85,19 @@ declare module "node:fs" {
     X_OK: number;
   };
   export function accessSync(path: string, mode?: number): void;
+  export function existsSync(path: string): boolean;
+  export function mkdirSync(path: string, options?: { recursive?: boolean }): void;
   export function readFileSync(path: string): Uint8Array;
   export function rmSync(path: string, options?: { force?: boolean; recursive?: boolean }): void;
   export function statSync(path: string): {
     isFile(): boolean;
     isDirectory(): boolean;
   };
+  export function writeFileSync(path: string, data: string | Uint8Array): void;
+}
+
+declare module "node:os" {
+  export function homedir(): string;
 }
 
 declare module "node:path" {

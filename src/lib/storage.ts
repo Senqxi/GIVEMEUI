@@ -270,7 +270,8 @@ export function trustAdapter(state: WorkspaceState, adapter: TrustedAdapter): Wo
 }
 
 export function createStorageId(prefix: string): string {
-  const randomId = globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  const cryptoProvider = (globalThis as { crypto?: { randomUUID?: () => string } }).crypto;
+  const randomId = cryptoProvider?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(16).slice(2)}`;
   return `${prefix}-${randomId}`;
 }
 

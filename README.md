@@ -19,6 +19,7 @@ This alpha slice focuses on deterministic behavior:
 - Apply built-in adapters for popular tools such as FFmpeg, yt-dlp, and Git.
 - Edit generated field labels, descriptions, types, groups, required state, choices, and UI hints.
 - Persist tool schemas, trusted executables, presets, and run history locally.
+- Store projects in a local SQLite database with JSON backup export.
 - Import/export command schemas as JSON.
 
 Cloud AI is not required. Local AI provider support is optional and disabled by default.
@@ -122,6 +123,7 @@ npm run pack:check
 - Phase 7 tool adapters: [docs/PHASE_7_TOOL_ADAPTERS.md](./docs/PHASE_7_TOOL_ADAPTERS.md)
 - Phase 8 workflow builder: [docs/PHASE_8_WORKFLOW_BUILDER.md](./docs/PHASE_8_WORKFLOW_BUILDER.md)
 - Phase 9 security and trust: [docs/PHASE_9_SECURITY_TRUST.md](./docs/PHASE_9_SECURITY_TRUST.md)
+- Phase 10 persistence and projects: [docs/PHASE_10_PERSISTENCE_PROJECT_MODEL.md](./docs/PHASE_10_PERSISTENCE_PROJECT_MODEL.md)
 - V1 workflows: [docs/V1_WORKFLOWS.md](./docs/V1_WORKFLOWS.md)
 - Threat model: [docs/THREAT_MODEL.md](./docs/THREAT_MODEL.md)
 - Release process: [docs/RELEASE.md](./docs/RELEASE.md)

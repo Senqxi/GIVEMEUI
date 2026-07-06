@@ -1,6 +1,8 @@
 import type { DiscoveryRequest, DiscoveryResponse, RunEvent, RunRequest } from "./schema";
 import type { AiCompletion, AiProviderDetection, AiRunSummaryRequest, AiSchemaPatchResponse, AiSettings } from "./ai";
 import type { ToolManifest } from "./schema";
+import type { CleanupResult, ProjectExport, ProjectSnapshot } from "./projects";
+import type { WorkspaceState } from "./storage";
 
 export async function discoverTool(request: DiscoveryRequest): Promise<DiscoveryResponse> {
   const response = await fetch("/api/discover", {
@@ -14,6 +16,98 @@ export async function discoverTool(request: DiscoveryRequest): Promise<Discovery
   }
 
   return response.json() as Promise<DiscoveryResponse>;
+}
+
+export async function loadProjectSnapshot(): Promise<ProjectSnapshot> {
+  const response = await fetch("/api/projects");
+  if (!response.ok) {
+    throw new Error(await response.text());
+  }
+  return response.json() as Promise<ProjectSnapshot>;
+}
+
+export async function saveProjectWorkspace(workspace: WorkspaceState, projectId?: string): Promise<ProjectSnapshot> {
+  const response = await fetch("/api/workspace", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ projectId, workspace })
+  });
+
+  if (!response.ok) {
+    throw new Error(await response.text());
+  }
+
+  return response.json() as Promise<ProjectSnapshot>;
+}
+
+export async function createProject(name: string): Promise<ProjectSnapshot> {
+  const response = await fetch("/api/projects", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ name })
+  });
+
+  if (!response.ok) {
+    throw new Error(await response.text());
+  }
+
+  return response.json() as Promise<ProjectSnapshot>;
+}
+
+export async function selectProject(projectId: string): Promise<ProjectSnapshot> {
+  const response = await fetch("/api/projects/select", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ projectId })
+  });
+
+  if (!response.ok) {
+    throw new Error(await response.text());
+  }
+
+  return response.json() as Promise<ProjectSnapshot>;
+}
+
+export async function deleteProject(projectId: string): Promise<ProjectSnapshot> {
+  const response = await fetch("/api/projects/delete", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ projectId })
+  });
+
+  if (!response.ok) {
+    throw new Error(await response.text());
+  }
+
+  return response.json() as Promise<ProjectSnapshot>;
+}
+
+export async function exportProject(projectId?: string): Promise<ProjectExport> {
+  const response = await fetch("/api/projects/export", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ projectId })
+  });
+
+  if (!response.ok) {
+    throw new Error(await response.text());
+  }
+
+  return response.json() as Promise<ProjectExport>;
+}
+
+export async function cleanupProject(projectId?: string): Promise<CleanupResult> {
+  const response = await fetch("/api/projects/cleanup", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ projectId })
+  });
+
+  if (!response.ok) {
+    throw new Error(await response.text());
+  }
+
+  return response.json() as Promise<CleanupResult>;
 }
 
 export async function runCommandStream(
