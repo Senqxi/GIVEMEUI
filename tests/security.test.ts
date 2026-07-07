@@ -54,6 +54,19 @@ describe("security helpers", () => {
     expect(risk.warnings.join(" ")).toContain("Recursive forced removal");
   });
 
+  it("does not mark generic force flags as destructive without tool context", () => {
+    const command: CommandSpec = {
+      id: "convert",
+      name: "convert",
+      fields: [{ id: "force", label: "Force", kind: "boolean", flag: "--force", required: false, confidence: 1 }]
+    };
+    const manifest = { ...sampleManifest, executable: "example-tool", commands: [command] };
+    const risk = detectCommandRisk(manifest, command, ["example-tool", "--force"]);
+
+    expect(risk.destructive).toBe(false);
+    expect(risk.requiresShell).toBe(false);
+  });
+
   it("gates shell executables", () => {
     const command: CommandSpec = {
       id: "shell",

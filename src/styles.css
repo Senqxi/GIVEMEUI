@@ -511,7 +511,8 @@ button:not(:disabled):hover {
 }
 
 .command-select,
-.preset-controls select {
+.preset-controls select,
+.preset-name-input {
   min-height: 30px;
   max-width: 180px;
   border: 1px solid var(--line);
@@ -731,6 +732,10 @@ button:not(:disabled):hover {
 
 .preset-controls select {
   width: 128px;
+}
+
+.preset-name-input {
+  width: 134px;
 }
 
 .command-preview pre {
@@ -2397,7 +2402,8 @@ button:not(:disabled):hover {
     justify-content: flex-start;
   }
 
-  .preset-controls select {
+  .preset-controls select,
+  .preset-name-input {
     width: 108px;
   }
 

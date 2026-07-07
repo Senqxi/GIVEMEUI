@@ -9,7 +9,7 @@ export type CommandRisk = {
 
 const SHELL_EXECUTABLES = new Set(["sh", "bash", "zsh", "fish", "ksh", "csh", "tcsh", "pwsh", "powershell", "cmd"]);
 const DESTRUCTIVE_EXECUTABLES = new Set(["mkfs", "mkfs.ext4", "mkfs.xfs", "fdisk", "parted", "shred", "wipefs"]);
-const DESTRUCTIVE_FLAGS = new Set(["--delete", "--remove", "--force", "--overwrite", "--wipe", "--format", "--prune"]);
+const DESTRUCTIVE_FLAGS = new Set(["--delete", "--remove", "--overwrite", "--wipe", "--format", "--prune"]);
 
 export function schemaFingerprint(manifest: ToolManifest): string {
   return stableHash(stableStringify(canonicalManifestForTrust(manifest)));

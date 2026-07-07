@@ -172,6 +172,7 @@ export function App() {
   const [activeSection, setActiveSection] = useState<WorkspaceSection>("tool-ui");
   const [selectedRun, setSelectedRun] = useState<StoredRun | null>(null);
   const [runSettings, setRunSettings] = useState<RunSettings>(DEFAULT_RUN_SETTINGS);
+  const [presetNameDraft, setPresetNameDraft] = useState("");
   const [showAiSettings, setShowAiSettings] = useState(false);
   const [aiDetections, setAiDetections] = useState<AiProviderDetection[]>([]);
   const [aiStatus, setAiStatus] = useState<string>("");
@@ -184,6 +185,7 @@ export function App() {
   const [selectedWorkflowId, setSelectedWorkflowId] = useState<string>("");
   const [workflowRunState, setWorkflowRunState] = useState<WorkflowRunState>({ running: false, stepRuns: [] });
   const [riskReviewKey, setRiskReviewKey] = useState("");
+  const [clearWorkspaceArmed, setClearWorkspaceArmed] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
   const runCaptureRef = useRef<RunCapture | null>(null);
   const schemaFileInputRef = useRef<HTMLInputElement | null>(null);
@@ -1205,6 +1207,8 @@ export function App() {
     setSelectedCommandId(nextManifest.commands[0].id);
     setSelectedFieldId(nextManifest.commands[0].fields[0]?.id ?? null);
     setValues(initialValuesFor(nextManifest.commands[0]));
+    setPresetNameDraft("");
+    setClearWorkspaceArmed(false);
   }
 
   function handleSelectCommand(commandId: string) {
@@ -1214,6 +1218,7 @@ export function App() {
     setSelectedCommandId(nextCommand.id);
     setSelectedFieldId(nextCommand.fields[0]?.id ?? null);
     setValues(initialValuesFor(nextCommand));
+    setPresetNameDraft("");
   }
 
   async function handleCreateProject() {
@@ -1298,6 +1303,62 @@ export function App() {
     }
   }
 
+  async function handleClearWorkspace() {
+    if (!clearWorkspaceArmed) {
+      setClearWorkspaceArmed(true);
+      appendConsole("system", "Click Confirm Clear to reset the active workspace to a blank slate.");
+      return;
+    }
+
+    const workspace = createWorkspace(sampleManifest);
+    const nextManifest = workspace.manifests[0] ?? sampleManifest;
+    const nextCommand = nextManifest.commands[0] ?? sampleManifest.commands[0];
+    const line: ConsoleLine = {
+      id: createStorageId("line"),
+      stream: "system",
+      text: "Workspace cleared. Blank slate ready.",
+      at: new Date().toISOString()
+    };
+
+    abortRef.current?.abort();
+    abortRef.current = null;
+    runCaptureRef.current = null;
+    persistWorkspace(workspace);
+    setWorkspaceState(workspace);
+    setSelectedCommandId(nextCommand.id);
+    setSelectedFieldId(nextCommand.fields[0]?.id ?? null);
+    setValues(initialValuesFor(nextCommand));
+    setShowAdvanced(false);
+    setSelectedWorkflowId("");
+    setWorkflowRunState({ running: false, stepRuns: [] });
+    setSelectedRun(null);
+    setConsoleLines([line]);
+    setRunState({ running: false, exitCode: null, durationMs: null, command: [] });
+    setRunSettings(DEFAULT_RUN_SETTINGS);
+    setPresetNameDraft("");
+    setSchemaSuggestions([]);
+    setSchemaSuggestionStatus("");
+    setAiExplanation(null);
+    setAiExplaining(false);
+    setRiskReviewKey("");
+    setActiveConsoleTab("all");
+    setActiveSection("tool-ui");
+    setClearWorkspaceArmed(false);
+
+    if (!projectSnapshot) {
+      setProjectStatus("Cleared browser workspace.");
+      return;
+    }
+
+    try {
+      const saved = await saveProjectWorkspace(workspace, projectSnapshot.activeProjectId);
+      setProjectSnapshot(saved);
+      setProjectStatus(`Cleared ${projectName(saved)} in SQLite.`);
+    } catch (error) {
+      setProjectStatus(error instanceof Error ? `SQLite clear failed: ${error.message}` : "SQLite clear failed.");
+    }
+  }
+
   function applyWorkspaceSnapshot(snapshot: ProjectSnapshot, workspace: WorkspaceState) {
     setProjectSnapshot(snapshot);
     setWorkspaceState(workspace);
@@ -1307,6 +1368,8 @@ export function App() {
     setSelectedCommandId(nextCommand.id);
     setSelectedFieldId(nextCommand.fields[0]?.id ?? null);
     setValues(initialValuesFor(nextCommand));
+    setPresetNameDraft("");
+    setClearWorkspaceArmed(false);
     setWorkflowRunState({ running: false, stepRuns: [] });
     setProjectStatus(`Loaded ${projectName(snapshot)} from SQLite.`);
   }
@@ -1359,7 +1422,7 @@ export function App() {
 
   function handleSavePreset() {
     const suggestedName = `${selectedCommand.name} preset ${commandPresets.length + 1}`;
-    const name = window.prompt("Preset name", suggestedName)?.trim();
+    const name = presetNameDraft.trim() || suggestedName;
     if (!name) return;
 
     const now = new Date().toISOString();
@@ -1373,6 +1436,7 @@ export function App() {
       updatedAt: now
     };
     commitWorkspace((current) => appendPreset(current, preset));
+    setPresetNameDraft("");
     appendConsole("system", `Saved preset "${name}".`);
   }
 
@@ -1460,10 +1524,12 @@ export function App() {
         projectSnapshot={projectSnapshot}
         projectStatus={projectStatus}
         runCount={workspaceState.runs.length}
+        clearWorkspaceArmed={clearWorkspaceArmed}
         onCleanupProject={() => void handleCleanupProject()}
         onCreateProject={() => void handleCreateProject()}
         onDeleteProject={() => void handleDeleteProject()}
         onExportProject={() => void handleExportProject()}
+        onClearWorkspace={() => void handleClearWorkspace()}
         onNewTool={handleNewTool}
         onNavigateSection={navigateToSection}
         onSelectProject={(projectId) => void handleSelectProject(projectId)}
@@ -1528,6 +1594,7 @@ export function App() {
               pinnedPath={pinnedExecutablePath}
               presets={commandPresets}
               preview={commandPreview}
+              presetNameDraft={presetNameDraft}
               runSettings={runSettings}
               runState={runState}
               schemaFingerprint={manifestSchemaFingerprint}
@@ -1537,6 +1604,7 @@ export function App() {
               onDestructiveRiskReviewChange={(reviewed) => setRiskReviewKey(reviewed ? currentRiskReviewKey : "")}
               onCancel={handleCancel}
               onLoadPreset={handleLoadPreset}
+              onPresetNameChange={setPresetNameDraft}
               onRun={handleRun}
               onRunSettingsChange={setRunSettings}
               onSavePreset={handleSavePreset}
@@ -1654,7 +1722,9 @@ function Sidebar({
   projectSnapshot,
   projectStatus,
   runCount,
+  clearWorkspaceArmed,
   onCleanupProject,
+  onClearWorkspace,
   onCreateProject,
   onDeleteProject,
   onExportProject,
@@ -1672,7 +1742,9 @@ function Sidebar({
   projectSnapshot: ProjectSnapshot | null;
   projectStatus: string;
   runCount: number;
+  clearWorkspaceArmed: boolean;
   onCleanupProject: () => void;
+  onClearWorkspace: () => void;
   onCreateProject: () => void;
   onDeleteProject: () => void;
   onExportProject: () => void;
@@ -1723,6 +1795,9 @@ function Sidebar({
           </button>
           <button className="mini-button" onClick={onCleanupProject} disabled={!projectSnapshot}>
             Clean
+          </button>
+          <button className={`mini-button ${clearWorkspaceArmed ? "danger-mini" : ""}`} onClick={onClearWorkspace}>
+            {clearWorkspaceArmed ? "Confirm Clear" : "Clear"}
           </button>
           <button className="mini-button danger-mini" onClick={onDeleteProject} disabled={!projectSnapshot || projectSnapshot.projects.length <= 1}>
             Delete
@@ -2050,6 +2125,7 @@ function CommandPreview({
   pinnedPath,
   presets,
   preview,
+  presetNameDraft,
   runSettings,
   schemaFingerprint,
   schemaRequiresTrust,
@@ -2059,6 +2135,7 @@ function CommandPreview({
   onCancel,
   onSavePreset,
   onLoadPreset,
+  onPresetNameChange,
   onRunSettingsChange,
   onTrustAdapters,
   onTrustExecutable,
@@ -2075,6 +2152,7 @@ function CommandPreview({
   pinnedPath?: string;
   presets: SavedPreset[];
   preview: string;
+  presetNameDraft: string;
   runSettings: RunSettings;
   schemaFingerprint: string;
   schemaRequiresTrust: boolean;
@@ -2084,6 +2162,7 @@ function CommandPreview({
   onCancel: () => void;
   onSavePreset: () => void;
   onLoadPreset: (presetId: string) => void;
+  onPresetNameChange: (value: string) => void;
   onRunSettingsChange: (settings: RunSettings) => void;
   onTrustAdapters: () => void;
   onTrustExecutable: () => void;
@@ -2108,6 +2187,13 @@ function CommandPreview({
                 </option>
               ))}
             </select>
+            <input
+              aria-label="Preset name"
+              className="preset-name-input"
+              value={presetNameDraft}
+              placeholder="Preset name"
+              onChange={(event) => onPresetNameChange(event.target.value)}
+            />
             <button className="secondary-button compact-button" onClick={onSavePreset}>
               Save Preset
             </button>

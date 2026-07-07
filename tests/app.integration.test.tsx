@@ -154,10 +154,10 @@ describe("GIVEMEUI app integration", () => {
   });
 
   it("saves a preset and reloads it into the generated UI", async () => {
-    vi.mocked(window.prompt).mockReturnValue("Preset A");
     const user = await renderApp();
 
     await user.type(screen.getByTestId("field-c"), "print('preset')");
+    await user.type(screen.getByLabelText("Preset name"), "Preset A");
     await user.click(screen.getByRole("button", { name: "Save Preset" }));
     expect(await screen.findByText('Saved preset "Preset A".')).toBeTruthy();
 
@@ -169,5 +169,22 @@ describe("GIVEMEUI app integration", () => {
     await waitFor(() => {
       expect((screen.getByTestId("field-c") as HTMLInputElement).value).toBe("print('preset')");
     });
+  });
+
+  it("clears the active workspace after a confirmation click", async () => {
+    const user = await renderApp();
+
+    await user.type(screen.getByTestId("field-c"), "print('preset')");
+    await user.type(screen.getByLabelText("Preset name"), "Preset A");
+    await user.click(screen.getByRole("button", { name: "Save Preset" }));
+    expect(await screen.findByText('Saved preset "Preset A".')).toBeTruthy();
+
+    await user.click(screen.getByRole("button", { name: "Clear" }));
+    expect(await screen.findByText("Click Confirm Clear to reset the active workspace to a blank slate.")).toBeTruthy();
+    await user.click(screen.getByRole("button", { name: "Confirm Clear" }));
+
+    expect(await screen.findByText("Workspace cleared. Blank slate ready.")).toBeTruthy();
+    expect((screen.getByTestId("field-c") as HTMLInputElement).value).toBe("");
+    expect(within(screen.getByLabelText("Load preset")).queryByRole("option", { name: "Preset A" })).toBeNull();
   });
 });
