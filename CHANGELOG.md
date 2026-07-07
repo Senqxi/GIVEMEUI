@@ -29,6 +29,7 @@ This project follows the spirit of semantic versioning while it is pre-1.0: mino
 - Phase 10 local SQLite project model with migrations, project switching, workspace save/load, JSON project export, delete flow, cleanup flow, and output artifact metadata persistence.
 - Phase 11 production UI pass with screen navigation, keyboard run/cancel/focus actions, run detail, artifacts viewer, and bounded raw log rendering.
 - PTY execution foundation with explicit Stream/PTY run mode selection, terminal event streaming, workflow propagation, and local runner validation.
+- Phase 12 testing strategy with jsdom app integration tests for discovery, schema editing, generated UI rendering, command runs, streamed output, run history, and presets.
 
 ### Security
 

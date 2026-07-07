@@ -774,9 +774,11 @@ python3 -c "import argparse; print('ok')"
 
 ### Exit Criteria
 
-- CI passes lint, typecheck, unit tests, and selected integration tests.
-- E2E tests cover the primary user flow.
-- Real command fixtures are snapshot-tested.
+- CI passes lint, typecheck, unit tests, and selected integration tests. **Complete for typecheck/test/pack-check; lint remains a future script.**
+- E2E tests cover the primary user flow. **Complete for jsdom app-level flow coverage; browser automation can expand later.**
+- Real command fixtures are snapshot-tested. **Complete for representative parser fixtures.**
+
+Status: complete for the current local CLI alpha. See `docs/PHASE_12_TESTING_STRATEGY.md`.
 
 ## Phase 13: Packaging And Distribution
 
