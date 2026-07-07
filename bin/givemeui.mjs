@@ -1,10 +1,12 @@
 #!/usr/bin/env node
 import { spawn } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
-import { dirname, join, resolve } from "node:path";
+import { dirname, join, parse, resolve } from "node:path";
+import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
 
 const packageRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+const requireFromPackage = createRequire(join(packageRoot, "package.json"));
 const packageJson = JSON.parse(readFileSync(join(packageRoot, "package.json"), "utf8"));
 const options = parseArgs(process.argv.slice(2));
 
@@ -20,7 +22,7 @@ if (options.version) {
 
 const staticDir = join(packageRoot, "dist");
 const serverEntry = join(packageRoot, "server/index.ts");
-const tsxCli = join(packageRoot, "node_modules/tsx/dist/cli.mjs");
+const tsxCli = resolvePackageFile("tsx/dist/cli.mjs");
 
 if (!existsSync(join(staticDir, "index.html"))) {
   console.error("GIVEMEUI has not been built yet. Run `npm run build` from the project root, then run `givemeui` again.");
@@ -109,6 +111,26 @@ function parseArgs(args) {
   }
 
   return parsed;
+}
+
+function resolvePackageFile(specifier) {
+  try {
+    return requireFromPackage.resolve(specifier);
+  } catch {
+    return resolveNodeModulesFile(specifier);
+  }
+}
+
+function resolveNodeModulesFile(specifier) {
+  let current = packageRoot;
+  const root = parse(current).root;
+
+  while (true) {
+    const candidate = join(current, "node_modules", specifier);
+    if (existsSync(candidate)) return candidate;
+    if (current === root) return join(packageRoot, "node_modules", specifier);
+    current = dirname(current);
+  }
 }
 
 function readValue(args, index, flag) {

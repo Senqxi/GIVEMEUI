@@ -30,6 +30,7 @@ This project follows the spirit of semantic versioning while it is pre-1.0: mino
 - Phase 11 production UI pass with screen navigation, keyboard run/cancel/focus actions, run detail, artifacts viewer, and bounded raw log rendering.
 - PTY execution foundation with explicit Stream/PTY run mode selection, terminal event streaming, workflow propagation, and local runner validation.
 - Phase 12 testing strategy with jsdom app integration tests for discovery, schema editing, generated UI rendering, command runs, streamed output, run history, and presets.
+- Phase 13 packaging and distribution with checksummed GitHub release tarballs, packaging metadata, manual update docs, and release artifact automation.
 
 ### Security
 

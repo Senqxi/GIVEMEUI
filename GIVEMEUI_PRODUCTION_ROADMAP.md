@@ -788,19 +788,21 @@ Ship a real local app.
 
 ### Tasks
 
-1. Configure desktop builds.
-2. Add app icon and metadata.
-3. Add auto-update strategy or document manual updates.
-4. Sign and notarize macOS builds when ready.
-5. Build Windows and Linux packages after macOS is stable.
-6. Create release checklist.
-7. Add crash/error reporting only if it is local-first and opt-in.
+1. Configure desktop builds. **Complete for local CLI tarball distribution; native wrappers deferred.**
+2. Add app icon and metadata. **Complete.**
+3. Add auto-update strategy or document manual updates. **Complete.**
+4. Sign and notarize macOS builds when ready. **Documented as deferred until native macOS builds exist.**
+5. Build Windows and Linux packages after macOS is stable. **Linux-compatible tarball complete; Windows native package deferred.**
+6. Create release checklist. **Complete.**
+7. Add crash/error reporting only if it is local-first and opt-in. **Complete: no reporting enabled.**
 
 ### Exit Criteria
 
-- A user can download, install, and run the app.
-- The app can execute local commands with appropriate permissions.
-- Releases are reproducible.
+- A user can download, install, and run the app. **Complete for GitHub release tarball installs.**
+- The app can execute local commands with appropriate permissions. **Complete through the local trusted runner.**
+- Releases are reproducible. **Complete with release checks, package script, checksums, and manifest.**
+
+Status: complete for the current local CLI alpha. See `docs/PHASE_13_PACKAGING_DISTRIBUTION.md`.
 
 ## Phase 14: Beta Release
 

@@ -4,6 +4,7 @@
   "description": "Local-first CLI-to-UI generator for terminal tools.",
   "license": "MIT",
   "type": "module",
+  "preferGlobal": true,
   "homepage": "https://github.com/Senqxi/GIVEMEUI#readme",
   "repository": {
     "type": "git",
@@ -19,6 +20,7 @@
     "bin/",
     "dist/",
     "docs/",
+    "packaging/",
     "scripts/",
     "server/",
     "src/lib/",
@@ -39,6 +41,10 @@
   "engines": {
     "node": ">=20"
   },
+  "os": [
+    "darwin",
+    "linux"
+  ],
   "scripts": {
     "dev": "node scripts/dev.mjs",
     "dev:api": "tsx watch server/index.ts",
@@ -51,7 +57,9 @@
     "test:app": "vitest run tests/app.integration.test.tsx",
     "preview": "vite preview --host 127.0.0.1",
     "prepack": "npm run build",
-    "pack:check": "npm pack --dry-run"
+    "pack:check": "npm pack --dry-run",
+    "package:local": "node scripts/package-local.mjs",
+    "release:check": "npm run typecheck && npm run test && npm run pack:check"
   },
   "dependencies": {
     "node-pty": "^1.1.0",

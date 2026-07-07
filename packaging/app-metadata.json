@@ -1,0 +1,23 @@
+{
+  "name": "GIVEMEUI",
+  "packageName": "givemeui",
+  "description": "Local-first CLI-to-UI generator for terminal tools.",
+  "entrypoint": "bin/givemeui.mjs",
+  "icon": "public/favicon.svg",
+  "distribution": "npm-compatible tarball from GitHub releases",
+  "supportedPlatforms": ["darwin", "linux"],
+  "deferredPlatforms": ["win32"],
+  "updateStrategy": "manual GitHub release download and reinstall",
+  "nativeDesktopWrapper": {
+    "status": "deferred",
+    "preferred": "Tauri after local CLI package stabilizes"
+  },
+  "signing": {
+    "macos": "not configured",
+    "notarization": "not configured"
+  },
+  "crashReporting": {
+    "enabled": false,
+    "policy": "No crash or error reports leave the device unless a future opt-in local-first reporter is added."
+  }
+}

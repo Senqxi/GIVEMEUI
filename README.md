@@ -37,6 +37,18 @@ It should work with ordinary developer tools, media tools, scripts, automation t
 
 GIVEMEUI is not a mobile product. The production target is a local desktop command-line installation for Debian/Linux and macOS-style systems.
 
+## Install From GitHub Release
+
+Download the latest `givemeui-<version>.tgz` and matching `.sha256` file from GitHub Releases, then install it locally:
+
+```bash
+shasum -a 256 -c givemeui-0.1.0.tgz.sha256
+npm install -g ./givemeui-0.1.0.tgz
+givemeui --open
+```
+
+Manual updates use the same flow with the newer release tarball.
+
 ## Install From Source
 
 Until a package is published, install the CLI from a local checkout:
@@ -127,6 +139,7 @@ npm run pack:check
 - Phase 10 persistence and projects: [docs/PHASE_10_PERSISTENCE_PROJECT_MODEL.md](./docs/PHASE_10_PERSISTENCE_PROJECT_MODEL.md)
 - Phase 11 production UI: [docs/PHASE_11_PRODUCTION_UI.md](./docs/PHASE_11_PRODUCTION_UI.md)
 - Phase 12 testing strategy: [docs/PHASE_12_TESTING_STRATEGY.md](./docs/PHASE_12_TESTING_STRATEGY.md)
+- Phase 13 packaging and distribution: [docs/PHASE_13_PACKAGING_DISTRIBUTION.md](./docs/PHASE_13_PACKAGING_DISTRIBUTION.md)
 - PTY runner foundation: [docs/PTY_RUNNER_FOUNDATION.md](./docs/PTY_RUNNER_FOUNDATION.md)
 - V1 workflows: [docs/V1_WORKFLOWS.md](./docs/V1_WORKFLOWS.md)
 - Threat model: [docs/THREAT_MODEL.md](./docs/THREAT_MODEL.md)
