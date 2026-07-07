@@ -80,12 +80,12 @@ import {
 
 type ConsoleLine = {
   id: string;
-  stream: "system" | "stdout" | "stderr";
+  stream: "system" | "stdout" | "stderr" | "terminal";
   text: string;
   at: string;
 };
 
-type ConsoleTab = "all" | "detail" | "artifacts" | "insights" | "stdout" | "stderr" | "audit";
+type ConsoleTab = "all" | "detail" | "artifacts" | "insights" | "terminal" | "stdout" | "stderr" | "audit";
 type WorkspaceSection = "discover" | "tool-ui" | "schema" | "workflow" | "console";
 
 type RunState = {
@@ -1132,7 +1132,7 @@ export function App() {
       if (runCaptureRef.current) {
         runCaptureRef.current.stdout += event.chunk;
       }
-      appendConsole("stdout", event.chunk);
+      appendConsole("terminal", event.chunk);
       return;
     }
 
@@ -2935,7 +2935,7 @@ function OutputConsole({
   const visibleLines = lines.filter((line) => activeTab === "all" || line.stream === activeTab || line.stream === "system");
   const renderedLines = visibleLines.slice(-500);
   const hiddenLineCount = Math.max(0, visibleLines.length - renderedLines.length);
-  const stdout = useMemo(() => lines.filter((line) => line.stream === "stdout").map((line) => line.text).join("\n"), [lines]);
+  const stdout = useMemo(() => lines.filter((line) => line.stream === "stdout" || line.stream === "terminal").map((line) => line.text).join("\n"), [lines]);
   const stderr = useMemo(() => lines.filter((line) => line.stream === "stderr").map((line) => line.text).join("\n"), [lines]);
   const outputAnalysis = useMemo(() => analyzeRunOutput(stdout, stderr), [stdout, stderr]);
   const detailRun = selectedRun ?? runs[0] ?? null;
@@ -2945,9 +2945,21 @@ function OutputConsole({
     <section className="console-panel" ref={sectionRef}>
       <div className="console-toolbar">
         <div className="console-tabs">
-          {(["all", "detail", "artifacts", "insights", "stdout", "stderr", "audit"] as const).map((tab) => (
+          {(["all", "detail", "artifacts", "insights", "terminal", "stdout", "stderr", "audit"] as const).map((tab) => (
             <button className={activeTab === tab ? "selected" : ""} onClick={() => onTabChange(tab)} key={tab}>
-              {tab === "all" ? "Run History" : tab === "detail" ? "Run Detail" : tab === "artifacts" ? "Artifacts" : tab === "insights" ? "Insights" : tab === "audit" ? "Audit" : tab}
+              {tab === "all"
+                ? "Run History"
+                : tab === "detail"
+                  ? "Run Detail"
+                  : tab === "artifacts"
+                    ? "Artifacts"
+                    : tab === "insights"
+                      ? "Insights"
+                      : tab === "terminal"
+                        ? "Terminal"
+                        : tab === "audit"
+                          ? "Audit"
+                          : tab}
             </button>
           ))}
         </div>
@@ -3316,7 +3328,7 @@ function consoleLinesForRun(run: StoredRun): ConsoleLine[] {
   const summary = createConsoleLines("system", `Loaded saved run: ${run.preview}`, run.completedAt);
   const cwd = run.cwd ? createConsoleLines("system", `Working directory: ${run.cwd}`, run.completedAt) : [];
   const env = run.envKeys?.length ? createConsoleLines("system", `Environment keys: ${run.envKeys.join(", ")}`, run.completedAt) : [];
-  const stdout = createConsoleLines("stdout", run.stdout, run.completedAt);
+  const stdout = createConsoleLines(run.executionMode === "pty" ? "terminal" : "stdout", run.stdout, run.completedAt);
   const stderr = createConsoleLines("stderr", run.stderr, run.completedAt);
 
   if (stdout.length === 0 && stderr.length === 0) {

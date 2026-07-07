@@ -25,7 +25,7 @@ The current PTY foundation supports:
 
 - launching a command in a pseudoterminal;
 - setting fixed terminal dimensions;
-- streaming terminal output to the UI;
+- streaming terminal output to a dedicated UI console tab;
 - storing output in run history;
 - workflow variable compatibility through stdout-backed terminal output;
 - timeout and cancellation.

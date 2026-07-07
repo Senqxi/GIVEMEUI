@@ -2059,6 +2059,15 @@ button:not(:disabled):hover {
   color: #ffb4a8;
 }
 
+.console-line.terminal pre,
+.console-line.terminal code {
+  color: #d8f3ff;
+}
+
+.console-line.terminal code {
+  text-transform: uppercase;
+}
+
 .console-line.system pre,
 .console-line.system code {
   color: #a7e4d9;

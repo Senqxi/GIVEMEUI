@@ -41,11 +41,12 @@ The output console now separates:
 - selected run detail;
 - artifacts;
 - deterministic insights;
+- terminal output for PTY runs;
 - stdout;
 - stderr;
 - audit log.
 
-Raw log rendering is bounded to the latest 500 visible lines per stream view so long command output remains usable.
+Raw log rendering is bounded to the latest 500 visible lines per stream view so long command output remains usable. PTY output is shown as a terminal stream while remaining available to insights and run history.
 
 ## UI Direction
 
