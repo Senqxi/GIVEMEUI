@@ -2,7 +2,7 @@ import { formatCommand } from "./commandLine";
 import type { CommandSpec, FieldSpec, RunRequest, ToolManifest } from "./schema";
 
 export type FieldValues = Record<string, string | number | boolean | string[] | undefined>;
-export type RunOptions = Pick<RunRequest, "cwd" | "env" | "timeoutMs">;
+export type RunOptions = Pick<RunRequest, "cwd" | "env" | "executionMode" | "pty" | "timeoutMs">;
 
 export function buildArgs(command: CommandSpec, values: FieldValues): string[] {
   const positional: Array<{ position: number; value: string }> = [];
@@ -46,6 +46,8 @@ export function buildRunRequest(manifest: ToolManifest, command: CommandSpec, va
     executable: manifest.executable,
     baseArgs: [...manifest.baseArgs, ...(command.subcommand ?? [])],
     args: buildArgs(command, values),
+    executionMode: options.executionMode,
+    pty: options.pty,
     cwd: options.cwd,
     env: options.env,
     timeoutMs: options.timeoutMs ?? 120000,

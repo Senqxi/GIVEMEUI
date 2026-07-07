@@ -148,10 +148,19 @@ export type DiscoveryResponse = {
   version?: string;
 };
 
+export type ExecutionMode = "stream" | "pty";
+
+export type PtyOptions = {
+  cols?: number;
+  rows?: number;
+};
+
 export type RunRequest = {
   executable: string;
   baseArgs: string[];
   args: string[];
+  executionMode?: ExecutionMode;
+  pty?: PtyOptions;
   cwd?: string;
   env?: Record<string, string>;
   timeoutMs?: number;
@@ -159,9 +168,10 @@ export type RunRequest = {
 };
 
 export type RunEvent =
-  | { type: "start"; command: string[]; at: string }
+  | { type: "start"; command: string[]; executionMode?: ExecutionMode; at: string }
   | { type: "stdout"; chunk: string; at: string }
   | { type: "stderr"; chunk: string; at: string }
+  | { type: "terminal"; chunk: string; at: string }
   | { type: "exit"; exitCode: number | null; signal: string | null; durationMs: number; timedOut?: boolean; at: string }
   | { type: "error"; message: string; at: string };
 

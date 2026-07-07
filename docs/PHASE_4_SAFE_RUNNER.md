@@ -21,6 +21,8 @@ Phase 4 makes GIVEMEUI a real local command runner instead of only a schema and 
 - `args`: generated user argument array.
 - `cwd`: optional working directory.
 - `env`: optional environment overrides.
+- `executionMode`: optional `stream` or `pty`; defaults to `stream`.
+- `pty`: optional PTY dimensions for terminal mode.
 - `timeoutMs`: bounded process timeout.
 
 The server validates the request before spawning:
@@ -30,9 +32,11 @@ The server validates the request before spawning:
 - null bytes are rejected.
 - working directory must exist and be a directory.
 - environment keys must be valid shell-style names.
+- execution mode must be `stream` or `pty`.
+- PTY dimensions must stay within bounded ranges.
 - timeout must be between 1 second and 30 minutes.
 
-Commands are launched with `shell: false`.
+Stream-mode commands are launched with `shell: false`. PTY-mode commands allocate a local pseudoterminal for terminal-aware tools, but still pass executable and arguments as an argv array rather than a shell string.
 
 ## Trust Model
 
@@ -56,6 +60,7 @@ Saved runs store:
 - timeout state
 - duration
 - stdout and stderr
+- execution mode
 - optional working directory
 - environment key names only
 
@@ -69,11 +74,13 @@ Environment values are intentionally not stored.
 - Secrets are not shown in command logs: complete.
 - Explicit trust is required before local execution: complete.
 - Working directory, timeout, and environment controls exist: complete.
+- Optional PTY execution exists for terminal-aware commands: complete.
 
 ## Next Hardening Steps
 
 - Add file picker controls for working directory and file fields.
-- Add PTY mode for commands that require interactive terminal behavior.
+- Add typed stdin support for active PTY sessions.
+- Add a full terminal renderer for PTY escape sequences.
 - Add optional signed release artifacts for GitHub downloads.
 - Add a stronger permissions model before adding shell mode.
 - Move long-term persistence from local UI storage to SQLite or another local database.

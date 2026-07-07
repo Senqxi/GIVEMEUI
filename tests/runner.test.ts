@@ -8,8 +8,23 @@ describe("safe command runner validation", () => {
         executable: process.execPath,
         baseArgs: ["-e"],
         args: ["console.log('ok')"],
+        executionMode: "stream",
         cwd: process.cwd(),
         env: { GIVEMEUI_TEST: "1" },
+        timeoutMs: 5000
+      })
+    ).toEqual([]);
+  });
+
+  it("accepts explicit PTY run requests", () => {
+    expect(
+      validateRunRequest({
+        executable: process.execPath,
+        baseArgs: ["-e"],
+        args: ["console.log(process.stdout.isTTY ? 'tty' : 'not-tty')"],
+        executionMode: "pty",
+        pty: { cols: 100, rows: 28 },
+        cwd: process.cwd(),
         timeoutMs: 5000
       })
     ).toEqual([]);
@@ -21,6 +36,8 @@ describe("safe command runner validation", () => {
         executable: "",
         baseArgs: "not-array" as unknown as string[],
         args: ["ok\0bad"],
+        executionMode: "shell" as never,
+        pty: { cols: 2, rows: 1000 },
         timeoutMs: 25
       })
     ).toEqual(
@@ -28,6 +45,9 @@ describe("safe command runner validation", () => {
         "Run request is missing an executable.",
         "baseArgs must be an array of strings.",
         "args[0] contains an invalid null byte.",
+        "Execution mode must be stream or pty.",
+        "pty.cols must be an integer between 20 and 300.",
+        "pty.rows must be an integer between 5 and 120.",
         "Timeout must be between 1000ms and 1800000ms."
       ])
     );

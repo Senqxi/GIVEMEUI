@@ -62,7 +62,7 @@ import {
   type StoredRun,
   type WorkspaceState
 } from "./lib/storage";
-import { confidenceLevel, type CommandSpec, type FieldKind, type FieldSpec, type FieldUiHints, type RunEvent, type ToolManifest } from "./lib/schema";
+import { confidenceLevel, type CommandSpec, type ExecutionMode, type FieldKind, type FieldSpec, type FieldUiHints, type RunEvent, type ToolManifest } from "./lib/schema";
 import { isReviewField, validateToolManifest, type SchemaValidationResult } from "./lib/schemaValidation";
 import {
   duplicateWorkflowPreset,
@@ -102,6 +102,7 @@ type RunCapture = {
   commandName: string;
   command: string[];
   preview: string;
+  executionMode: ExecutionMode;
   stdout: string;
   stderr: string;
   startedAt: string;
@@ -112,6 +113,7 @@ type RunCapture = {
 type RunSettings = {
   cwd: string;
   envText: string;
+  executionMode: ExecutionMode;
   timeoutSeconds: number;
 };
 
@@ -140,6 +142,7 @@ const MAX_VISIBLE_FIELDS = 18;
 const DEFAULT_RUN_SETTINGS: RunSettings = {
   cwd: "",
   envText: "",
+  executionMode: "stream",
   timeoutSeconds: 120
 };
 
@@ -551,6 +554,8 @@ export function App() {
     const runOptions = {
       cwd: runSettings.cwd.trim() || undefined,
       env,
+      executionMode: runSettings.executionMode,
+      pty: runSettings.executionMode === "pty" ? { cols: 120, rows: 30 } : undefined,
       timeoutMs: timeoutMsFromSeconds(runSettings.timeoutSeconds)
     };
     const request = buildRunRequest(manifest, selectedCommand, values, runOptions);
@@ -567,6 +572,7 @@ export function App() {
       commandName: selectedCommand.name,
       command: redactedCommand,
       preview: formatCommand(redactedCommand),
+      executionMode: request.executionMode ?? "stream",
       stdout: "",
       stderr: "",
       startedAt: new Date().toISOString(),
@@ -582,9 +588,10 @@ export function App() {
       commandId: selectedCommand.id,
       executable: manifest.executable,
       preview: formatCommand(redactedCommand),
-      metadata: {
-        importedSchema: manifest.source === "imported",
-        destructive: commandRisk.destructive,
+        metadata: {
+          executionMode: request.executionMode ?? "stream",
+          importedSchema: manifest.source === "imported",
+          destructive: commandRisk.destructive,
         warningCount: commandRisk.warnings.length
       }
     });
@@ -645,6 +652,7 @@ export function App() {
       runSettings: {
         cwd: runSettings.cwd.trim() || undefined,
         envText: runSettings.envText.trim() || undefined,
+        executionMode: runSettings.executionMode,
         timeoutSeconds: runSettings.timeoutSeconds
       }
     };
@@ -847,11 +855,13 @@ export function App() {
 
     const resolvedValues = resolveWorkflowValues(step.values, contexts);
     const redactedValues = resolveWorkflowValues(redactSecretValues(stepCommand.fields, step.values, "[redacted]"), contexts);
-    const runOptions = {
-      cwd: step.runSettings?.cwd?.trim() || undefined,
-      env,
-      timeoutMs: timeoutMsFromSeconds(step.runSettings?.timeoutSeconds ?? DEFAULT_RUN_SETTINGS.timeoutSeconds)
-    };
+      const runOptions = {
+        cwd: step.runSettings?.cwd?.trim() || undefined,
+        env,
+        executionMode: step.runSettings?.executionMode ?? "stream",
+        pty: step.runSettings?.executionMode === "pty" ? { cols: 120, rows: 30 } : undefined,
+        timeoutMs: timeoutMsFromSeconds(step.runSettings?.timeoutSeconds ?? DEFAULT_RUN_SETTINGS.timeoutSeconds)
+      };
     const request = resolveWorkflowRunRequest(buildRunRequest(stepManifest, stepCommand, resolvedValues, runOptions), contexts);
     const redactedRequest = resolveWorkflowRunRequest(buildRunRequest(stepManifest, stepCommand, redactedValues, runOptions), contexts);
     const actualCommand = [request.executable, ...request.baseArgs, ...request.args];
@@ -885,6 +895,7 @@ export function App() {
       stepName: step.name,
       command: redactedCommand,
       preview: formatCommand(redactedCommand),
+      executionMode: request.executionMode ?? "stream",
       status: "running",
       exitCode: null,
       durationMs: 0,
@@ -913,6 +924,11 @@ export function App() {
         request,
         (event) => {
           if (event.type === "stdout") {
+            stdout += event.chunk;
+            updateLiveWorkflowStepOutput(step.id, stdout, stderr);
+            return;
+          }
+          if (event.type === "terminal") {
             stdout += event.chunk;
             updateLiveWorkflowStepOutput(step.id, stdout, stderr);
             return;
@@ -1112,6 +1128,14 @@ export function App() {
       return;
     }
 
+    if (event.type === "terminal") {
+      if (runCaptureRef.current) {
+        runCaptureRef.current.stdout += event.chunk;
+      }
+      appendConsole("stdout", event.chunk);
+      return;
+    }
+
     if (event.type === "error") {
       if (runCaptureRef.current) {
         runCaptureRef.current.stderr += event.message;
@@ -1138,6 +1162,7 @@ export function App() {
         commandName: capture.commandName,
         command: capture.command,
         preview: capture.preview,
+        executionMode: capture.executionMode,
         exitCode: event.exitCode,
         signal: event.signal,
         durationMs: event.durationMs,
@@ -1161,6 +1186,7 @@ export function App() {
           preview: capture.preview,
           outcome: event.timedOut ? "timed_out" : event.exitCode === 0 ? "succeeded" : "failed",
           metadata: {
+            executionMode: capture.executionMode,
             exitCode: event.exitCode ?? undefined,
             durationMs: event.durationMs
           }
@@ -2107,7 +2133,7 @@ function CommandPreview({
           <code>{pinnedPath ?? executable}</code>
         </div>
         {isTrusted ? (
-          <span>argument-array execution</span>
+          <span>{runSettings.executionMode === "pty" ? "pty terminal" : "argument-array execution"}</span>
         ) : (
           <button className="secondary-button compact-button" data-testid="trust-executable" onClick={onTrustExecutable}>
             Trust Executable
@@ -2155,6 +2181,25 @@ function CommandPreview({
       ) : null}
       {trustBlocked ? <p className="run-block-note">Run is disabled until all trust and safety gates pass.</p> : null}
       <div className="run-settings-grid">
+        <label className="run-setting-field mode-field">
+          <span>Execution</span>
+          <div className="execution-mode-options" role="group" aria-label="Execution mode">
+            <button
+              type="button"
+              className={runSettings.executionMode === "stream" ? "selected" : ""}
+              onClick={() => onRunSettingsChange({ ...runSettings, executionMode: "stream" })}
+            >
+              Stream
+            </button>
+            <button
+              type="button"
+              className={runSettings.executionMode === "pty" ? "selected" : ""}
+              onClick={() => onRunSettingsChange({ ...runSettings, executionMode: "pty" })}
+            >
+              PTY
+            </button>
+          </div>
+        </label>
         <label className="run-setting-field">
           <span>Working Directory</span>
           <input
@@ -3010,6 +3055,10 @@ function RunDetailPanel({ run }: { run: StoredRun | null }) {
         <StatusPill label={run.timedOut ? "Timeout" : run.exitCode === 0 ? "Succeeded" : "Review"} tone={run.exitCode === 0 && !run.timedOut ? "success" : "warning"} />
       </div>
       <dl className="run-detail-grid">
+        <div>
+          <dt>Execution</dt>
+          <dd>{run.executionMode ?? "stream"}</dd>
+        </div>
         <div>
           <dt>Completed</dt>
           <dd>{new Date(run.completedAt).toLocaleString()}</dd>

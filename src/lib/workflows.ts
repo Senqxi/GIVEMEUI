@@ -1,12 +1,13 @@
 import type { FieldValues } from "./commandBuilder";
 import type { OutputAnalysis } from "./outputAnalysis";
-import type { RunRequest } from "./schema";
+import type { ExecutionMode, RunRequest } from "./schema";
 
 export type WorkflowStepStatus = "pending" | "running" | "succeeded" | "failed" | "skipped";
 
 export type WorkflowRunSettings = {
   cwd?: string;
   envText?: string;
+  executionMode?: ExecutionMode;
   timeoutSeconds?: number;
 };
 
@@ -32,6 +33,7 @@ export type WorkflowStepRun = {
   stepName: string;
   command: string[];
   preview: string;
+  executionMode?: ExecutionMode;
   status: WorkflowStepStatus;
   exitCode: number | null;
   signal?: string | null;

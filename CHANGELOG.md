@@ -28,6 +28,7 @@ This project follows the spirit of semantic versioning while it is pre-1.0: mino
 - Phase 9 security and trust hardening with schema/adapter trust, executable path pinning, destructive warnings, shell gating, provenance metadata, and a local audit log.
 - Phase 10 local SQLite project model with migrations, project switching, workspace save/load, JSON project export, delete flow, cleanup flow, and output artifact metadata persistence.
 - Phase 11 production UI pass with screen navigation, keyboard run/cancel/focus actions, run detail, artifacts viewer, and bounded raw log rendering.
+- PTY execution foundation with explicit Stream/PTY run mode selection, terminal event streaming, workflow propagation, and local runner validation.
 
 ### Security
 
@@ -45,6 +46,7 @@ This project follows the spirit of semantic versioning while it is pre-1.0: mino
 - AI suggestions never execute commands and must be reviewed before changing schemas.
 - Tool adapters improve metadata only; command execution still requires preview and executable trust.
 - Workflow steps run through the same safe argument-array runner and require trusted executables.
+- PTY mode still uses executable plus argument arrays and remains behind the same trust, preview, timeout, and cancellation controls.
 
 ## [0.1.0] - TBD
 

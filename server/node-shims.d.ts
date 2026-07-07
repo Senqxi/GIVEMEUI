@@ -80,6 +80,26 @@ declare module "node:child_process" {
   ): ChildProcess;
 }
 
+declare module "node-pty" {
+  export type IPty = {
+    kill(signal?: string): void;
+    onData(callback: (data: string) => void): void;
+    onExit(callback: (event: { exitCode: number; signal?: number }) => void): void;
+  };
+
+  export function spawn(
+    executable: string,
+    args: string[],
+    options: {
+      name?: string;
+      cols?: number;
+      rows?: number;
+      cwd?: string;
+      env?: Record<string, string>;
+    }
+  ): IPty;
+}
+
 declare module "node:fs" {
   export const constants: {
     X_OK: number;

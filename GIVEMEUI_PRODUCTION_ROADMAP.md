@@ -714,6 +714,23 @@ This is an operational tool, not a marketing site. The interface should be dense
 
 Status: complete for the current local CLI alpha. See `docs/PHASE_11_PRODUCTION_UI.md`.
 
+## Interphase: PTY Runner Foundation
+
+### Objectives
+
+Pull the pseudoterminal runner into the product early so future workflow, adapter, and terminal UI phases can build around the final execution model.
+
+### Exit Criteria
+
+- Stream mode remains the safe default for flag-driven tools. **Complete.**
+- PTY mode can run terminal-aware commands through a local pseudoterminal. **Complete.**
+- PTY mode still uses executable plus argument arrays, not shell strings. **Complete.**
+- PTY output streams into the UI and run history. **Complete.**
+- Workflow steps preserve selected execution mode. **Complete.**
+- PTY install/runtime behavior is documented. **Complete.**
+
+Status: complete for the current local CLI alpha. See `docs/PTY_RUNNER_FOUNDATION.md`.
+
 ## Phase 12: Testing Strategy
 
 ### Unit Tests

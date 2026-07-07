@@ -14,6 +14,7 @@ This alpha slice focuses on deterministic behavior:
 - Preview the exact command arguments.
 - Run the command locally without shell interpolation.
 - Stream stdout/stderr into the UI.
+- Optionally run commands through a local PTY for terminal-aware tools.
 - Show deterministic output insights for JSON, tables, diagnostics, progress, and file artifacts.
 - Optionally connect to local AI providers for reviewable schema suggestions and output explanations.
 - Apply built-in adapters for popular tools such as FFmpeg, yt-dlp, and Git.
@@ -125,6 +126,7 @@ npm run pack:check
 - Phase 9 security and trust: [docs/PHASE_9_SECURITY_TRUST.md](./docs/PHASE_9_SECURITY_TRUST.md)
 - Phase 10 persistence and projects: [docs/PHASE_10_PERSISTENCE_PROJECT_MODEL.md](./docs/PHASE_10_PERSISTENCE_PROJECT_MODEL.md)
 - Phase 11 production UI: [docs/PHASE_11_PRODUCTION_UI.md](./docs/PHASE_11_PRODUCTION_UI.md)
+- PTY runner foundation: [docs/PTY_RUNNER_FOUNDATION.md](./docs/PTY_RUNNER_FOUNDATION.md)
 - V1 workflows: [docs/V1_WORKFLOWS.md](./docs/V1_WORKFLOWS.md)
 - Threat model: [docs/THREAT_MODEL.md](./docs/THREAT_MODEL.md)
 - Release process: [docs/RELEASE.md](./docs/RELEASE.md)

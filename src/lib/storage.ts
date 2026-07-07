@@ -1,7 +1,7 @@
 import type { FieldValues } from "./commandBuilder";
 import { DEFAULT_AI_SETTINGS, normalizeAiSettings, type AiSettings } from "./ai";
 import type { OutputAnalysis } from "./outputAnalysis";
-import type { AdapterMetadata, CommandSpec, FieldKind, FieldSpec, ToolManifest, ToolSource } from "./schema";
+import type { AdapterMetadata, CommandSpec, ExecutionMode, FieldKind, FieldSpec, ToolManifest, ToolSource } from "./schema";
 import { normalizeToolManifest } from "./schemaValidation";
 import type { SavedWorkflow, StoredWorkflowRun, WorkflowStep, WorkflowStepRun, WorkflowStepStatus } from "./workflows";
 
@@ -33,6 +33,7 @@ export type StoredRun = {
   commandName: string;
   command: string[];
   preview: string;
+  executionMode?: ExecutionMode;
   exitCode: number | null;
   signal?: string | null;
   durationMs: number;

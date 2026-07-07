@@ -48,15 +48,18 @@ GIVEMEUI is a local app that helps users run local command-line tools. Its prima
 | Wrong binary execution | `$PATH` resolves unexpected executable | Show executable path and pin trust decisions to resolved paths when discovery provides them |
 | Dual-use tool misuse | UI accelerates unauthorized activity | No bundled unauthorized presets, exact previews, sensitive metadata |
 | AI hallucination | AI invents invalid or unsafe flags | AI suggestions are optional, diffable, and user-reviewed |
+| PTY ambiguity | Terminal-aware tools can alter output formatting or prompts | PTY mode is explicit, still uses argv arrays, and keeps raw terminal output visible |
 
 ## Command Execution Rules
 
 - Default execution uses `spawn(executable, args, { shell: false })`.
+- Optional PTY execution uses executable plus argument arrays and does not imply shell mode.
 - Shell mode is gated and does not execute in this build.
 - Every run must have a visible command preview.
 - Newly discovered executables must become trust decisions before execution.
 - Timeouts and cancellation are required.
 - stdout and stderr are captured separately.
+- PTY output is captured as a combined terminal stream and stored with run output for review.
 - Trust decisions and execution events are recorded in the local audit log with redacted previews.
 
 ## Schema Import Rules
