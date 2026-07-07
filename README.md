@@ -124,6 +124,7 @@ npm run pack:check
 - Phase 8 workflow builder: [docs/PHASE_8_WORKFLOW_BUILDER.md](./docs/PHASE_8_WORKFLOW_BUILDER.md)
 - Phase 9 security and trust: [docs/PHASE_9_SECURITY_TRUST.md](./docs/PHASE_9_SECURITY_TRUST.md)
 - Phase 10 persistence and projects: [docs/PHASE_10_PERSISTENCE_PROJECT_MODEL.md](./docs/PHASE_10_PERSISTENCE_PROJECT_MODEL.md)
+- Phase 11 production UI: [docs/PHASE_11_PRODUCTION_UI.md](./docs/PHASE_11_PRODUCTION_UI.md)
 - V1 workflows: [docs/V1_WORKFLOWS.md](./docs/V1_WORKFLOWS.md)
 - Threat model: [docs/THREAT_MODEL.md](./docs/THREAT_MODEL.md)
 - Release process: [docs/RELEASE.md](./docs/RELEASE.md)

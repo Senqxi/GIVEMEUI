@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from "react";
 import {
   AlertTriangle,
   BotOff,
@@ -85,7 +85,8 @@ type ConsoleLine = {
   at: string;
 };
 
-type ConsoleTab = "all" | "insights" | "stdout" | "stderr" | "audit";
+type ConsoleTab = "all" | "detail" | "artifacts" | "insights" | "stdout" | "stderr" | "audit";
+type WorkspaceSection = "discover" | "tool-ui" | "schema" | "workflow" | "console";
 
 type RunState = {
   running: boolean;
@@ -165,6 +166,8 @@ export function App() {
   });
   const [isDiscovering, setIsDiscovering] = useState(false);
   const [activeConsoleTab, setActiveConsoleTab] = useState<ConsoleTab>("all");
+  const [activeSection, setActiveSection] = useState<WorkspaceSection>("tool-ui");
+  const [selectedRun, setSelectedRun] = useState<StoredRun | null>(null);
   const [runSettings, setRunSettings] = useState<RunSettings>(DEFAULT_RUN_SETTINGS);
   const [showAiSettings, setShowAiSettings] = useState(false);
   const [aiDetections, setAiDetections] = useState<AiProviderDetection[]>([]);
@@ -181,6 +184,12 @@ export function App() {
   const abortRef = useRef<AbortController | null>(null);
   const runCaptureRef = useRef<RunCapture | null>(null);
   const schemaFileInputRef = useRef<HTMLInputElement | null>(null);
+  const discoveryInputRef = useRef<HTMLInputElement | null>(null);
+  const discoverySectionRef = useRef<HTMLElement | null>(null);
+  const toolUiSectionRef = useRef<HTMLElement | null>(null);
+  const schemaSectionRef = useRef<HTMLElement | null>(null);
+  const workflowSectionRef = useRef<HTMLElement | null>(null);
+  const consoleSectionRef = useRef<HTMLElement | null>(null);
 
   const manifest = useMemo(() => {
     return workspaceState.manifests.find((tool) => tool.id === workspaceState.activeToolId) ?? workspaceState.manifests[0] ?? sampleManifest;
@@ -251,6 +260,34 @@ export function App() {
   }, [selectedWorkflowId, workspaceState.workflows]);
 
   useEffect(() => {
+    function handleKeyDown(event: KeyboardEvent) {
+      const target = event.target as HTMLElement | null;
+      const editing = target?.tagName === "INPUT" || target?.tagName === "TEXTAREA" || target?.tagName === "SELECT";
+
+      if (event.key === "/" && !editing) {
+        event.preventDefault();
+        navigateToSection("discover");
+        discoveryInputRef.current?.focus();
+        return;
+      }
+
+      if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
+        event.preventDefault();
+        if (!runState.running && canRunCommand) void handleRun();
+        return;
+      }
+
+      if (event.key === "Escape" && (runState.running || workflowRunState.running)) {
+        event.preventDefault();
+        handleCancel();
+      }
+    }
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [canRunCommand, runState.running, workflowRunState.running, manifest, selectedCommand, values, runSettings, workspaceState]);
+
+  useEffect(() => {
     let canceled = false;
 
     async function loadProject() {
@@ -295,6 +332,18 @@ export function App() {
       }
       return next;
     });
+  }
+
+  function navigateToSection(section: WorkspaceSection) {
+    setActiveSection(section);
+    const ref = {
+      discover: discoverySectionRef,
+      "tool-ui": toolUiSectionRef,
+      schema: schemaSectionRef,
+      workflow: workflowSectionRef,
+      console: consoleSectionRef
+    }[section];
+    ref.current?.scrollIntoView({ block: "nearest", inline: "nearest" });
   }
 
   function audit(entry: Omit<Parameters<typeof appendAuditLog>[1], "id" | "at">) {
@@ -525,6 +574,7 @@ export function App() {
       envKeys: request.env ? Object.keys(request.env).sort() : undefined
     };
     setRunState({ running: true, exitCode: null, durationMs: null, command: actualCommand });
+    setSelectedRun(null);
     appendConsole("system", `Running ${formatCommand(redactedCommand)}`);
     audit({
       action: "run.started",
@@ -1116,6 +1166,7 @@ export function App() {
           }
         })
       );
+      setSelectedRun(storedRun);
       runCaptureRef.current = null;
     }
   }
@@ -1236,6 +1287,8 @@ export function App() {
 
   function handleNewTool() {
     setCommandInput("");
+    navigateToSection("discover");
+    window.setTimeout(() => discoveryInputRef.current?.focus(), 0);
     appendConsole("system", "Enter a command in the discovery bar to create a new local tool schema.");
   }
 
@@ -1355,6 +1408,7 @@ export function App() {
   }
 
   function handleSelectRun(run: StoredRun) {
+    setSelectedRun(run);
     setConsoleLines(consoleLinesForRun(run));
     setRunState({
       running: false,
@@ -1362,7 +1416,8 @@ export function App() {
       durationMs: run.durationMs,
       command: run.command
     });
-    setActiveConsoleTab("all");
+    setActiveConsoleTab("detail");
+    navigateToSection("console");
   }
 
   function appendConsole(stream: ConsoleLine["stream"], text: string) {
@@ -1372,6 +1427,7 @@ export function App() {
   return (
     <main className="app-shell">
       <Sidebar
+        activeSection={activeSection}
         activeToolId={manifest.id}
         aiSettings={workspaceState.aiSettings}
         manifests={workspaceState.manifests}
@@ -1383,20 +1439,26 @@ export function App() {
         onDeleteProject={() => void handleDeleteProject()}
         onExportProject={() => void handleExportProject()}
         onNewTool={handleNewTool}
+        onNavigateSection={navigateToSection}
         onSelectProject={(projectId) => void handleSelectProject(projectId)}
         onSelectManifest={handleSelectManifest}
         onSettings={() => setShowAiSettings(true)}
-        onShowRuns={() => setActiveConsoleTab("all")}
+        onShowRuns={() => {
+          setActiveConsoleTab("all");
+          navigateToSection("console");
+        }}
       />
       <section className="workspace">
         <DiscoveryBar
+          sectionRef={discoverySectionRef}
+          inputRef={discoveryInputRef}
           commandInput={commandInput}
           isDiscovering={isDiscovering}
           onCommandInputChange={setCommandInput}
           onDiscover={handleDiscover}
         />
         <div className="work-grid">
-          <section className="primary-panel">
+          <section className="primary-panel" ref={toolUiSectionRef}>
             <PanelHeader
               icon={<Wrench size={17} />}
               title="Generated UI"
@@ -1457,7 +1519,7 @@ export function App() {
               onTrustSchema={handleTrustSchema}
             />
           </section>
-          <aside className="inspector-panel">
+          <aside className="inspector-panel" ref={schemaSectionRef}>
             <PanelHeader
               icon={<FileJson2 size={17} />}
               title="Schema Review"
@@ -1507,6 +1569,7 @@ export function App() {
           </aside>
         </div>
         <WorkflowBuilderPanel
+          sectionRef={workflowSectionRef}
           workflows={workspaceState.workflows}
           workflowRuns={workspaceState.workflowRuns}
           selectedWorkflow={selectedWorkflow}
@@ -1527,6 +1590,7 @@ export function App() {
           }}
         />
         <OutputConsole
+          sectionRef={consoleSectionRef}
           activeTab={activeConsoleTab}
           aiExplanation={aiExplanation}
           aiExplaining={aiExplaining}
@@ -1535,6 +1599,7 @@ export function App() {
           lines={consoleLines}
           runs={workspaceState.runs}
           runState={runState}
+          selectedRun={selectedRun}
           onExplainOutput={handleExplainOutput}
           onRerun={handleRun}
           onRunSelect={handleSelectRun}
@@ -1556,6 +1621,7 @@ export function App() {
 }
 
 function Sidebar({
+  activeSection,
   activeToolId,
   aiSettings,
   manifests,
@@ -1566,12 +1632,14 @@ function Sidebar({
   onCreateProject,
   onDeleteProject,
   onExportProject,
+  onNavigateSection,
   onNewTool,
   onSelectProject,
   onSelectManifest,
   onSettings,
   onShowRuns
 }: {
+  activeSection: WorkspaceSection;
   activeToolId: string;
   aiSettings: AiSettings;
   manifests: ToolManifest[];
@@ -1582,6 +1650,7 @@ function Sidebar({
   onCreateProject: () => void;
   onDeleteProject: () => void;
   onExportProject: () => void;
+  onNavigateSection: (section: WorkspaceSection) => void;
   onNewTool: () => void;
   onSelectProject: (projectId: string) => void;
   onSelectManifest: (toolId: string) => void;
@@ -1636,6 +1705,26 @@ function Sidebar({
         <small className="project-status">{projectStatus}</small>
       </section>
 
+      <nav className="sidebar-section screen-nav">
+        <div className="section-label">Screens</div>
+        {[
+          { id: "discover", label: "Discover", icon: <Search size={15} /> },
+          { id: "tool-ui", label: "Tool UI", icon: <Wrench size={15} /> },
+          { id: "schema", label: "Schema", icon: <FileJson2 size={15} /> },
+          { id: "workflow", label: "Workflows", icon: <History size={15} /> },
+          { id: "console", label: "Output", icon: <Terminal size={15} /> }
+        ].map((item) => (
+          <button
+            className={`screen-nav-button ${activeSection === item.id ? "selected" : ""}`}
+            key={item.id}
+            onClick={() => onNavigateSection(item.id as WorkspaceSection)}
+          >
+            {item.icon}
+            <span>{item.label}</span>
+          </button>
+        ))}
+      </nav>
+
       <nav className="sidebar-section">
         <div className="section-label">Tool Library</div>
         <div className="tool-list">
@@ -1673,21 +1762,26 @@ function Sidebar({
 }
 
 function DiscoveryBar({
+  sectionRef,
+  inputRef,
   commandInput,
   isDiscovering,
   onCommandInputChange,
   onDiscover
 }: {
+  sectionRef: RefObject<HTMLElement>;
+  inputRef: RefObject<HTMLInputElement>;
   commandInput: string;
   isDiscovering: boolean;
   onCommandInputChange: (value: string) => void;
   onDiscover: () => void;
 }) {
   return (
-    <header className="discovery-bar">
+    <header className="discovery-bar" ref={sectionRef}>
       <div className="command-search">
         <Search size={17} />
         <input
+          ref={inputRef}
           data-testid="command-discovery-input"
           value={commandInput}
           onChange={(event) => onCommandInputChange(event.target.value)}
@@ -2096,6 +2190,7 @@ function CommandPreview({
 }
 
 function WorkflowBuilderPanel({
+  sectionRef,
   workflows,
   workflowRuns,
   selectedWorkflow,
@@ -2112,6 +2207,7 @@ function WorkflowBuilderPanel({
   onRunNext,
   onSelectWorkflow
 }: {
+  sectionRef: RefObject<HTMLElement>;
   workflows: SavedWorkflow[];
   workflowRuns: StoredWorkflowRun[];
   selectedWorkflow: SavedWorkflow | null;
@@ -2134,7 +2230,7 @@ function WorkflowBuilderPanel({
   const nextStep = selectedWorkflow?.steps[completedCount];
 
   return (
-    <section className="workflow-panel" data-testid="workflow-builder">
+    <section className="workflow-panel" data-testid="workflow-builder" ref={sectionRef}>
       <PanelHeader
         icon={<History size={17} />}
         title="Workflow Builder"
@@ -2761,6 +2857,7 @@ function SchemaSourceView({ manifest }: { manifest: ToolManifest }) {
 }
 
 function OutputConsole({
+  sectionRef,
   lines,
   runs,
   auditLog,
@@ -2770,10 +2867,12 @@ function OutputConsole({
   aiSettings,
   onTabChange,
   runState,
+  selectedRun,
   onExplainOutput,
   onRerun,
   onRunSelect
 }: {
+  sectionRef: RefObject<HTMLElement>;
   lines: ConsoleLine[];
   runs: StoredRun[];
   auditLog: AuditLogEntry[];
@@ -2783,22 +2882,27 @@ function OutputConsole({
   aiSettings: AiSettings;
   onTabChange: (tab: ConsoleTab) => void;
   runState: RunState;
+  selectedRun: StoredRun | null;
   onExplainOutput: (stdout: string, stderr: string, analysis: OutputAnalysis) => void;
   onRerun: () => void;
   onRunSelect: (run: StoredRun) => void;
 }) {
   const visibleLines = lines.filter((line) => activeTab === "all" || line.stream === activeTab || line.stream === "system");
+  const renderedLines = visibleLines.slice(-500);
+  const hiddenLineCount = Math.max(0, visibleLines.length - renderedLines.length);
   const stdout = useMemo(() => lines.filter((line) => line.stream === "stdout").map((line) => line.text).join("\n"), [lines]);
   const stderr = useMemo(() => lines.filter((line) => line.stream === "stderr").map((line) => line.text).join("\n"), [lines]);
   const outputAnalysis = useMemo(() => analyzeRunOutput(stdout, stderr), [stdout, stderr]);
+  const detailRun = selectedRun ?? runs[0] ?? null;
+  const artifactAnalysis = detailRun?.outputAnalysis ?? outputAnalysis;
 
   return (
-    <section className="console-panel">
+    <section className="console-panel" ref={sectionRef}>
       <div className="console-toolbar">
         <div className="console-tabs">
-          {(["all", "insights", "stdout", "stderr", "audit"] as const).map((tab) => (
+          {(["all", "detail", "artifacts", "insights", "stdout", "stderr", "audit"] as const).map((tab) => (
             <button className={activeTab === tab ? "selected" : ""} onClick={() => onTabChange(tab)} key={tab}>
-              {tab === "all" ? "Run History" : tab === "insights" ? "Insights" : tab === "audit" ? "Audit" : tab}
+              {tab === "all" ? "Run History" : tab === "detail" ? "Run Detail" : tab === "artifacts" ? "Artifacts" : tab === "insights" ? "Insights" : tab === "audit" ? "Audit" : tab}
             </button>
           ))}
         </div>
@@ -2829,6 +2933,8 @@ function OutputConsole({
             onExplain={() => onExplainOutput(stdout, stderr, outputAnalysis)}
           />
         ) : null}
+        {activeTab === "detail" ? <RunDetailPanel run={detailRun} /> : null}
+        {activeTab === "artifacts" ? <ArtifactsPanel analysis={artifactAnalysis} /> : null}
         {activeTab === "all" && runs.length > 0 ? (
           <div className="run-history-list">
             {runs.slice(0, 5).map((run) => (
@@ -2867,15 +2973,89 @@ function OutputConsole({
             )}
           </div>
         ) : null}
-        {activeTab !== "insights" && activeTab !== "audit" ? visibleLines.map((line) => (
-          <div className={`console-line ${line.stream}`} key={line.id}>
-            <span>{new Date(line.at).toLocaleTimeString()}</span>
-            <code>{line.stream}</code>
-            <pre className={diagnosticClassFor(line.text)}>{line.text}</pre>
-          </div>
-        )) : null}
+        {activeTab !== "insights" && activeTab !== "audit" && activeTab !== "detail" && activeTab !== "artifacts" ? (
+          <>
+            {hiddenLineCount > 0 ? <div className="console-trim-note">{hiddenLineCount} older lines hidden in this view.</div> : null}
+            {renderedLines.map((line) => (
+              <div className={`console-line ${line.stream}`} key={line.id}>
+                <span>{new Date(line.at).toLocaleTimeString()}</span>
+                <code>{line.stream}</code>
+                <pre className={diagnosticClassFor(line.text)}>{line.text}</pre>
+              </div>
+            ))}
+          </>
+        ) : null}
       </div>
     </section>
+  );
+}
+
+function RunDetailPanel({ run }: { run: StoredRun | null }) {
+  if (!run) {
+    return (
+      <div className="run-detail-empty">
+        <Terminal size={22} />
+        <span>No run selected.</span>
+      </div>
+    );
+  }
+
+  return (
+    <div className="run-detail-panel" data-testid="run-detail">
+      <div className="run-detail-header">
+        <span>
+          <strong>{run.toolName}</strong>
+          <small>{run.commandName}</small>
+        </span>
+        <StatusPill label={run.timedOut ? "Timeout" : run.exitCode === 0 ? "Succeeded" : "Review"} tone={run.exitCode === 0 && !run.timedOut ? "success" : "warning"} />
+      </div>
+      <dl className="run-detail-grid">
+        <div>
+          <dt>Completed</dt>
+          <dd>{new Date(run.completedAt).toLocaleString()}</dd>
+        </div>
+        <div>
+          <dt>Duration</dt>
+          <dd>{run.durationMs}ms</dd>
+        </div>
+        <div>
+          <dt>Exit</dt>
+          <dd>{run.exitCode ?? run.signal ?? "n/a"}</dd>
+        </div>
+        <div>
+          <dt>Artifacts</dt>
+          <dd>{run.outputAnalysis?.summary.artifactCount ?? 0}</dd>
+        </div>
+        {run.cwd ? (
+          <div>
+            <dt>CWD</dt>
+            <dd>{run.cwd}</dd>
+          </div>
+        ) : null}
+        {run.envKeys?.length ? (
+          <div>
+            <dt>Env Keys</dt>
+            <dd>{run.envKeys.join(", ")}</dd>
+          </div>
+        ) : null}
+      </dl>
+      <pre className="run-detail-preview">{run.preview}</pre>
+    </div>
+  );
+}
+
+function ArtifactsPanel({ analysis }: { analysis: OutputAnalysis }) {
+  return (
+    <div className="artifacts-panel" data-testid="artifacts-viewer">
+      {analysis.artifacts.length > 0 ? (
+        analysis.artifacts.map((artifact) => <ArtifactRow artifact={artifact} key={`${artifact.path}-${artifact.line}`} />)
+      ) : (
+        <div className="run-detail-empty">
+          <FileJson2 size={22} />
+          <span>No artifacts detected.</span>
+        </div>
+      )}
+    </div>
   );
 }
 

@@ -708,9 +708,11 @@ This is an operational tool, not a marketing site. The interface should be dense
 
 ### Exit Criteria
 
-- The app feels like a practical developer tool.
-- Core workflows are reachable in one or two clicks.
-- Mobile web support is not required for desktop V1, but responsive resizing should not break the layout.
+- The app feels like a practical developer tool. **Complete.**
+- Core workflows are reachable in one or two clicks. **Complete.**
+- Mobile web support is not required for desktop V1, but responsive resizing should not break the layout. **Complete.**
+
+Status: complete for the current local CLI alpha. See `docs/PHASE_11_PRODUCTION_UI.md`.
 
 ## Phase 12: Testing Strategy
 
